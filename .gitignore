@@ -1,0 +1,22 @@
+# --- OS / file-manager metadata ---
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# --- Editor / IDE working state ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.#*
+
+# --- Backup, temp, and merge artifacts ---
+*.bak
+*.tmp
+*.orig
+*.rej
+
+# --- Task-local working state ---
+# J-Space loop controller ledger (records reasoning state, not deliverables)
+.jspace/
