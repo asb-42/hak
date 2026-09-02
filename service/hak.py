@@ -277,6 +277,15 @@ async def lifespan(app):
 
 app = FastAPI(title="HAK", version="v1", lifespan=lifespan)
 
+# Human viewer: read-only lens on the same API (no protocol surface, no
+# writes). Mounted same-origin, so the browser needs no CORS and no second
+# service. Deployments without service/ui/ behave exactly as before.
+_UI_DIR = Path(__file__).resolve().parent / "ui"
+if (_UI_DIR / "index.html").is_file():
+    from fastapi.staticfiles import StaticFiles  # noqa: E402 (optional dep, only when ui/ present)
+
+    app.mount("/ui", StaticFiles(directory=str(_UI_DIR), html=True), name="ui")
+
 
 @app.exception_handler(StarletteHTTPException)
 def http_exc_handler(request: Request, exc: StarletteHTTPException):

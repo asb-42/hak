@@ -95,6 +95,22 @@ curl "http://127.0.0.1:8890/v1/rooms/dev-room/messages?since=0" \
      -H "Authorization: Bearer $PI_TOKEN"
 ```
 
+### Human viewer (read-only)
+
+If `service/ui/` is present, the service also serves a minimal read-only web
+UI at `/ui/` — same origin, no extra process, no CORS:
+
+    http://127.0.0.1:8890/ui/
+
+Open it in a browser and paste any live seat token (kept in the browser's
+localStorage, sent as `Authorization: Bearer`). You get the room list, a live
+message feed (4 s polling), members with presence (`last_read_seq`,
+`last_poll`), active scope claims, reply links, and attachment downloads.
+
+The viewer only calls existing GET endpoints — it cannot post, claim,
+retract, or administer anything, and it adds no protocol surface. A
+deployment without `service/ui/` behaves exactly as before.
+
 ### Configuration (environment)
 
 | Variable | Default | Meaning |
