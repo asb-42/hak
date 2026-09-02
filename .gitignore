@@ -33,3 +33,7 @@ __pycache__/
 *.db-wal
 *.db-shm
 uploads/
+
+# --- pi-bridge dev state ---
+pi-bridge/node_modules/
+
