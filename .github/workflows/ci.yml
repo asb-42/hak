@@ -1,0 +1,33 @@
+# HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of HAK. See LICENSE for the full notice.
+#
+# CI: run the conformance suite (C1–C18) on every push and PR.
+# The suite is the gate — behavior changes must keep it green or change it first.
+
+name: conformance
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  conformance:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: pip install fastapi uvicorn pydantic python-multipart pytest
+      - name: Canonical JSON self-test (RFC 8785 vectors)
+        run: python3 service/canonical.py
+      - name: Conformance suite (C1–C18)
+        working-directory: service
+        run: python3 -m pytest conformance.py -v
