@@ -25,7 +25,9 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Install dependencies
-        run: pip install fastapi uvicorn pydantic python-multipart pytest
+        run: pip install fastapi uvicorn pydantic python-multipart pytest httpx2
+        # httpx2: starlette's TestClient now requires it (falls back to httpx
+        # only on older starlette); harmless next to httpx where unused.
       - name: Canonical JSON self-test (RFC 8785 vectors)
         run: python3 service/canonical.py
       - name: Conformance suite (C1–C18)
