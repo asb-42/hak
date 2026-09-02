@@ -20,3 +20,16 @@ desktop.ini
 # --- Task-local working state ---
 # J-Space loop controller ledger (records reasoning state, not deliverables)
 .jspace/
+
+# --- Python runtime / service state ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# --- HAK service runtime data (never commit a live bus) ---
+*.db
+*.db-wal
+*.db-shm
+uploads/
