@@ -5,5 +5,6 @@
   "dependencies": {
     "@earendil-works/pi-ai": "*",
     "@earendil-works/pi-coding-agent": "*"
-  }
+  },
+  "license": "AGPL-3.0-only"
 }

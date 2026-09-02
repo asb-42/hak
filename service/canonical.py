@@ -16,6 +16,10 @@ RFC 8785 Appendix B-style vectors are used in the self-test at the bottom
 and in the conformance suite (C14).
 """
 
+# HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of HAK. See LICENSE for the full notice.
+
 from __future__ import annotations
 
 import json

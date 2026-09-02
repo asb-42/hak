@@ -4,19 +4,23 @@ Run:  HAK_DB=path/to/hak.db HAK_UPLOADS=path/to/uploads uvicorn hak:app --port 8
 Bootstrap (no admin token left):  python3 hak.py --bootstrap --seat operator
 """
 
+# HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of HAK. See LICENSE for the full notice.
+
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
 import re
 import secrets
+import shutil
 import sqlite3
 import sys
 import threading
 import time
-from contextlib import contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -31,6 +35,7 @@ from canonical import canonicalize
 DB_PATH = os.environ.get("HAK_DB", "hak.db")
 UPLOADS_DIR = Path(os.environ.get("HAK_UPLOADS", "uploads"))
 SCHEMA_PATH = Path(__file__).parent / "schema.sql"
+SWEEP_INTERVAL = int(os.environ.get("HAK_SWEEP_INTERVAL", "3600"))  # 0 = off
 
 ROOM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
 TYPES = {"chat", "status", "task_request", "task_result", "artifact_ref",
@@ -246,7 +251,31 @@ class TokenIn(BaseModel):
 
 # ---------------------------------------------------------------- app
 
-app = FastAPI(title="HAK", version="v1")
+@asynccontextmanager
+async def lifespan(app):
+    """Startup: ensure schema; start the periodic sweeper thread (D18/D23).
+    Shutdown: stop it. The sweeper is also exposed as run.sh --sweep for manual
+    passes; both are idempotent — the sweep is the only deleter (D23)."""
+    init_db()
+    stop = threading.Event()
+    th = None
+    if SWEEP_INTERVAL > 0:
+        def loop():
+            while not stop.wait(SWEEP_INTERVAL):
+                try:
+                    sweep_once()
+                except Exception as e:  # never kill the service over GC
+                    print(f"[hak] sweep pass failed: {e}", file=sys.stderr)
+
+        th = threading.Thread(target=loop, name="hak-sweeper", daemon=True)
+        th.start()
+    yield
+    stop.set()
+    if th is not None:
+        th.join(timeout=5)
+
+
+app = FastAPI(title="HAK", version="v1", lifespan=lifespan)
 
 
 @app.exception_handler(StarletteHTTPException)
@@ -652,13 +681,16 @@ def post_scope(room: str, payload: ScopeIn, request: Request):
                  payload.kind, payload.units, payload.note, ttl, expires, now_iso()))
             return JSONResponse(status_code=200, content={
                 "scope_id": own[0]["scope_id"], "scope_seq": sseq, "expires_at": expires})
-        # conflict matrix (D22 symmetric, D34)
+        # conflict matrix (D22, symmetric per D34): the relation applies
+        # direction-independently — a live share blocks a new write, exactly as
+        # a live write blocks a new share.
         conflict = None
-        if payload.kind == "exclusive" and live:
-            conflict = live[0]
+        if payload.kind == "exclusive":
+            if live:
+                conflict = live[0]
         elif payload.kind in ("write", "read-exclusive"):
             for r in live:
-                if r["kind"] in ("exclusive", "write", "read-exclusive"):
+                if r["kind"] in ("exclusive", "write", "read-exclusive", "share"):
                     conflict = r
                     break
         elif payload.kind == "share":
@@ -666,6 +698,7 @@ def post_scope(room: str, payload: ScopeIn, request: Request):
                 if r["kind"] in ("exclusive", "write", "read-exclusive"):
                     conflict = r
                     break
+            # share vs share is allowed while capacity holds (checked below)
         if conflict is not None:
             raise error(409, "scope_conflict", "Conflicting live claim (D22)",
                         {"conflicting": {"holder": conflict["seat"], "kind": conflict["kind"],
@@ -952,7 +985,10 @@ def _is_referenced(file_id: str, room: str) -> bool:
 
 # ------------------------------------------------- CLI bootstrap (D24)
 
-def bootstrap_operator() -> None:
+def bootstrap_operator(label: bool = True) -> str:
+    """Issue a fresh operator token (D24 recovery path). Returns the secret.
+    Idempotent creation is handled by the caller (--ensure-operator) checking
+    for a live operator token first."""
     init_db()
     secret = secrets.token_urlsafe(32)
     with write_tx() as con:
@@ -964,17 +1000,59 @@ def bootstrap_operator() -> None:
         if room_row:
             append_admin_envelope(con, room_row["name"], "token_bootstrap", "operator",
                                   "Operator admin token regenerated via host-local bootstrap (D24).")
-    print(f"operator token (shown once): {secret}")
+    if label:
+        print(f"operator token (shown once): {secret}")
+    return secret
+
+
+def has_live_operator_token() -> bool:
+    if not Path(DB_PATH).exists():
+        return False
+    with db() as con:
+        row = con.execute(
+            "SELECT 1 FROM tokens WHERE seat='operator' AND revoked_at IS NULL").fetchone()
+    return row is not None
+
+
+def backup_to(dest: str) -> Path:
+    """D38: hak.db and uploads/ are one backup unit. The DB is copied via the
+    SQLite Online Backup API (a plain copy of a live WAL db can miss committed
+    state); uploads are copied afterwards. A restore needs BOTH."""
+    dest_dir = Path(dest)
+    if dest_dir.exists() and any(dest_dir.iterdir()):
+        raise SystemExit(f"backup destination not empty: {dest_dir}")
+    dest_dir.mkdir(parents=True)
+    src = sqlite3.connect(DB_PATH)
+    dst = sqlite3.connect(dest_dir / "hak.db")
+    with dst:
+        src.backup(dst)          # online backup API — safe under WAL traffic
+    src.close()
+    dst.close()
+    shutil.copytree(UPLOADS_DIR, dest_dir / "uploads", dirs_exist_ok=True)
+    return dest_dir
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "--bootstrap":
+    if len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
         if "--seat" in sys.argv and "operator" in sys.argv[sys.argv.index("--seat") + 1:]:
             bootstrap_operator()
         else:
             print("usage: python3 hak.py --bootstrap --seat operator")
+    elif len(sys.argv) > 1 and sys.argv[1] == "--ensure-operator":
+        # raw secret on stdout (single line) for run.sh; envelope appended if
+        # any room exists
+        if has_live_operator_token():
+            print("operator token already live; no action", file=sys.stderr)
+            sys.exit(0)
+        print(bootstrap_operator(label=False))
     elif len(sys.argv) > 1 and sys.argv[1] == "--sweep":
         init_db()
         print(json.dumps(sweep_once()))
+    elif len(sys.argv) > 1 and sys.argv[1] == "--backup":
+        if len(sys.argv) < 3:
+            print("usage: python3 hak.py --backup <dir>")
+            sys.exit(2)
+        p = backup_to(sys.argv[2])
+        print(f"backup written: {p} (db + uploads; restore needs both, D38)")
     else:
-        print("usage: python3 hak.py --bootstrap --seat operator | --sweep")
+        print("usage: python3 hak.py --bootstrap --seat operator | --ensure-operator | --sweep | --backup <dir>")

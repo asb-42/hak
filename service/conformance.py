@@ -6,6 +6,10 @@ Run:  cd service && python3 -m pytest conformance.py -v
 Error envelope shape (D26): {"error": {"code": ..., "message": ..., "detail"?}}.
 """
 
+# HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+# SPDX-License-Identifier: AGPL-3.0-only
+# This file is part of HAK. See LICENSE for the full notice.
+
 from __future__ import annotations
 
 import json
@@ -743,6 +747,27 @@ def test_room_admin_only_creation():
         headers=hdr(SECRET["operator"]))
     assert r2.status_code == 201
     assert "operator" in r2.json()["charter"]["admins"]
+
+
+def test_conflict_matrix_symmetry_d34():
+    # share vs write is 409 in BOTH directions (Kimi K3 / D34)
+    make_room("x-sym")
+    t_a = issue_token("pi-203")["token"]
+    t_b = issue_token("pi-50")["token"]
+    join_and_approve("x-sym", "pi-203", t_a)
+    join_and_approve("x-sym", "pi-50", t_b)
+    # live share blocks a new write
+    assert claim("x-sym", t_a, "gpu://sym", "share").status_code == 201
+    r = claim("x-sym", t_b, "gpu://sym", "write")
+    assert r.status_code == 409 and r.json()["error"]["detail"]["conflicting"]["kind"] == "share"
+    # and the other direction: live write blocks a new share
+    assert claim("x-sym", t_b, "gpu://sym2", "write").status_code == 201
+    r2 = claim("x-sym", t_a, "gpu://sym2", "share")
+    assert r2.status_code == 409 and r2.json()["error"]["detail"]["conflicting"]["kind"] == "write"
+    # read-exclusive vs share, both directions
+    assert claim("x-sym", t_a, "gpu://sym3", "read-exclusive").status_code == 201
+    r3 = claim("x-sym", t_b, "gpu://sym3", "share")
+    assert r3.status_code == 409 and r3.json()["error"]["detail"]["conflicting"]["kind"] == "read-exclusive"
 
 
 def test_dm_transparency():

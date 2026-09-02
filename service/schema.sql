@@ -3,6 +3,10 @@
 -- (lapse markers excepted — compaction-time replay clarity only, D15/D23).
 -- Everything mutable that clients see is a projector (D2).
 
+-- HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+-- SPDX-License-Identifier: AGPL-3.0-only
+-- This file is part of HAK. See LICENSE for the full notice.
+
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 

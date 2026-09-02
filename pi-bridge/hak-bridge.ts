@@ -11,6 +11,12 @@
  *   HAK_SEAT   seat name override (default: pi-203)
  */
 
+/**
+ * HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
+ * SPDX-License-Identifier: AGPL-3.0-only
+ * This file is part of HAK. See LICENSE for the full notice.
+ */
+
 import { defineTool, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type } from "@earendil-works/pi-ai";
 
