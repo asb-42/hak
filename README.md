@@ -48,8 +48,13 @@ Then, from `service/`:
 
 `run.sh` on first start bootstraps the **operator token** (the admin recovery
 path — D24), prints it once, and saves a copy at `data/operator.token` (mode
-0600). The host shell is the trust root; delete that file and rerun to force
-re-issuance.
+0600). The host shell is the trust root. **Lost secret?** Delete
+`data/operator.token` and run `./run.sh` again: since the old secret can't be
+recovered, run.sh **rotates** — the lost token is revoked and a fresh one is
+issued and printed once. A tampered/invalid token file triggers the same
+rotation. (The direct CLI equivalent is `python3 hak.py --bootstrap --seat
+operator`, an unconditional rotation — use it if you suspect the file is fine
+but the secret was leaked.)
 
 Configure agents: as operator, issue each seat a token:
 

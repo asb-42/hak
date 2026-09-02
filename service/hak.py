@@ -995,12 +995,15 @@ def _is_referenced(file_id: str, room: str) -> bool:
 # ------------------------------------------------- CLI bootstrap (D24)
 
 def bootstrap_operator(label: bool = True) -> str:
-    """Issue a fresh operator token (D24 recovery path). Returns the secret.
-    Idempotent creation is handled by the caller (--ensure-operator) checking
-    for a live operator token first."""
+    """D24 recovery: ROTATE the operator token. Every live operator token is
+    revoked first — recovery running means the old secret is presumed lost —
+    then a fresh one is issued and a token_bootstrap envelope appended.
+    Returns the secret."""
     init_db()
     secret = secrets.token_urlsafe(32)
     with write_tx() as con:
+        con.execute("UPDATE tokens SET revoked_at=? WHERE seat='operator' AND revoked_at IS NULL",
+                    (now_iso(),))
         con.execute(
             "INSERT INTO tokens (token_id, seat, token_hash, created_at) VALUES (?,?,?,?)",
             ("t_bootstrap_" + secrets.token_hex(4), "operator",
@@ -1008,7 +1011,7 @@ def bootstrap_operator(label: bool = True) -> str:
         room_row = con.execute("SELECT name FROM rooms ORDER BY created_at LIMIT 1").fetchone()
         if room_row:
             append_admin_envelope(con, room_row["name"], "token_bootstrap", "operator",
-                                  "Operator admin token regenerated via host-local bootstrap (D24).")
+                                  "Operator admin token rotated via host-local bootstrap (D24).")
     if label:
         print(f"operator token (shown once): {secret}")
     return secret
@@ -1020,6 +1023,22 @@ def has_live_operator_token() -> bool:
     with db() as con:
         row = con.execute(
             "SELECT 1 FROM tokens WHERE seat='operator' AND revoked_at IS NULL").fetchone()
+    return row is not None
+
+
+def token_file_live(token_file: str) -> bool:
+    """The file's secret hashes to a live (unrevoked) token row.
+    Missing/empty/tampered file → False: the secret is not usable."""
+    p = Path(token_file)
+    if not p.exists():
+        return False
+    tok = p.read_text().strip()
+    if not tok:
+        return False
+    with db() as con:
+        row = con.execute(
+            "SELECT 1 FROM tokens WHERE token_hash=? AND revoked_at IS NULL",
+            (sha256_hex(tok.encode()),)).fetchone()
     return row is not None
 
 
@@ -1048,12 +1067,29 @@ if __name__ == "__main__":
         else:
             print("usage: python3 hak.py --bootstrap --seat operator")
     elif len(sys.argv) > 1 and sys.argv[1] == "--ensure-operator":
-        # raw secret on stdout (single line) for run.sh; envelope appended if
-        # any room exists
-        if has_live_operator_token():
-            print("operator token already live; no action", file=sys.stderr)
+        # Reconcile with run.sh's token file. Single source of truth for the
+        # file↔DB state — the caller must NOT re-check on its own (that dual
+        # check diverged once and wrote an empty token file).
+        #   file live in DB      → no-op (empty stdout, exit 0)
+        #   file gone/invalid    → D24 recovery: rotate (old secret presumed lost)
+        # No --token-file (manual use): check-only, never rotates — use
+        # --bootstrap --seat operator for an unconditional rotation.
+        if "--token-file" in sys.argv:
+            tf = sys.argv[sys.argv.index("--token-file") + 1]
+            if token_file_live(tf):
+                print("operator token file present and live; no action", file=sys.stderr)
+                sys.exit(0)
+            print("file missing/invalid but operator token(s) live — rotating "
+                  "(D24: secret presumed lost)", file=sys.stderr)
+            print(bootstrap_operator(label=False))
+        elif has_live_operator_token():
+            print("a live operator token exists; not rotating. If its secret is "
+                  "lost: hak.py --bootstrap --seat operator (unconditional), "
+                  "or --ensure-operator --token-file to reconcile with run.sh",
+                  file=sys.stderr)
             sys.exit(0)
-        print(bootstrap_operator(label=False))
+        else:
+            print(bootstrap_operator(label=False))
     elif len(sys.argv) > 1 and sys.argv[1] == "--sweep":
         init_db()
         print(json.dumps(sweep_once()))

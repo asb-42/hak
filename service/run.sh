@@ -101,36 +101,34 @@ resolve_python
 
 TOKEN_FILE="$HAK_DATA/operator.token"
 
-has_live_operator_token() {
-  [ -f "$TOKEN_FILE" ] || return 1
-  "$PY" - "$TOKEN_FILE" <<'PY'
-import hashlib, os, sqlite3, sys
-tok = open(sys.argv[1]).read().strip()
-if not tok:
-    sys.exit(1)
-con = sqlite3.connect(os.environ["HAK_DB"])
-row = con.execute("SELECT revoked_at FROM tokens WHERE token_hash=?",
-                  (hashlib.sha256(tok.encode()).hexdigest(),)).fetchone()
-con.close()
-sys.exit(0 if row and row[0] is None else 1)
-PY
-}
-
 # tokens for --ensure-operator: keep the operator secret on disk once (0600),
 # because run.sh is the host-local recovery path (D24) — the host shell is the
-# trust root on a LAN-only service. Remove the file to force re-issuance.
+# trust root on a LAN-only service.
+#
+# Reconciliation is owned by hak.py (--ensure-operator --token-file): ONE check
+# covering file and DB. run.sh must not pre-check on its own — a file-check
+# here and a DB-check in the CLI once diverged and wrote an empty token file.
+#   file live in DB          -> no-op
+#   file gone/invalid        -> D24 recovery: rotate (secret presumed lost)
 ensure_operator() {
-  if has_live_operator_token; then
-    say "operator token already present and live ($TOKEN_FILE)"
-    return 0
-  fi
-  say "no live operator token — bootstrapping (D24 host-local recovery)"
-  out=""
-  out="$($PY hak.py --ensure-operator)" || die "bootstrap failed"
-  printf '%s\n' "$out" > "$TOKEN_FILE"     # stdout is exactly the raw secret
-  chmod 600 "$TOKEN_FILE"
-  say "operator token saved to $TOKEN_FILE (0600). It is shown once:"
-  sed 's/^/    /' "$TOKEN_FILE"
+  out="$("$PY" hak.py --ensure-operator --token-file "$TOKEN_FILE" 2>/dev/null)" \
+    || die "bootstrap failed"
+  case "$out" in
+    "")
+      say "operator token already present and live ($TOKEN_FILE)"
+      ;;
+    *)
+      # stdout is exactly one line: the raw secret. Never persist anything
+      # else — refuse rather than write a broken credential to disk.
+      case "$out" in
+        *[!A-Za-z0-9_-]*|"") die "refusing to write malformed token" ;;
+      esac
+      printf '%s\n' "$out" > "$TOKEN_FILE"
+      chmod 600 "$TOKEN_FILE"
+      say "operator token rotated and saved to $TOKEN_FILE (0600). It is shown once:"
+      sed 's/^/    /' "$TOKEN_FILE"
+      ;;
+  esac
 }
 
 case "${1:-serve}" in
