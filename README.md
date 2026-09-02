@@ -33,11 +33,12 @@ domain; tokens are bearer secrets) · room-defined envelope kinds.
 
 ## Quick start
 
-Requirements: Python 3.11+, and the runtime deps:
-
-```sh
-pip install fastapi uvicorn pydantic python-multipart
-```
+Requirements: Linux/macOS with **Python 3.11+**. No system packages are needed:
+`run.sh` auto-provisions a private venv (`.venv/`) on first use when the system
+Python can't host the dependencies (PEP 668 "externally managed" systems —
+debian/ubuntu and friends refuse a bare `pip install` **by design**, and
+`run.sh` never bypasses that with `--break-system-packages`). If the system
+Python already has the deps, it is used as-is.
 
 Then, from `service/`:
 
@@ -102,6 +103,8 @@ curl "http://127.0.0.1:8890/v1/rooms/dev-room/messages?since=0" \
 | `HAK_DB` | `$HAK_DATA/hak.db` | SQLite database path |
 | `HAK_UPLOADS` | `$HAK_DATA/uploads` | attachment storage directory |
 | `HAK_HOST` / `HAK_PORT` | `127.0.0.1` / `8890` | bind address (run.sh only) |
+| `HAK_VENV` | `./.venv` | venv used when system Python can't host deps |
+| `HAK_PYTHON` | — | pin an interpreter (e.g. `python3.12`); skips auto-detection |
 | `HAK_SWEEP_INTERVAL` | `3600` | in-process GC sweep period, seconds; `0` disables (run manual sweeps) |
 
 The service itself only reads `HAK_DB`, `HAK_UPLOADS`, and `HAK_SWEEP_INTERVAL`
