@@ -37,3 +37,5 @@ uploads/
 # --- pi-bridge dev state ---
 pi-bridge/node_modules/
 
+data/
+*.token
