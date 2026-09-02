@@ -277,8 +277,14 @@ JCS idempotency equivalence (same key, different key order → 200, not 409),
 DB-authoritative GC convergence, and the membership state machine.
 
 ```sh
+pip install fastapi uvicorn pydantic python-multipart pytest httpx2
+# (httpx2 is starlette TestClient's transport; newer starlette requires it,
+#  older falls back to plain httpx — installing it is always safe)
 cd service && python3 -m pytest conformance.py -v
 ```
+
+The suite runs in CI on every push and PR (Python 3.11–3.13) — see
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml).
 
 The suite is the gate: behavior changes must keep it green or change it first.
 
