@@ -298,6 +298,14 @@ def http_exc_handler(request: Request, exc: StarletteHTTPException):
         "error": {"code": code, "message": str(exc.detail)}})
 
 
+@app.get("/v1/whoami")
+def whoami(request: Request):
+    """Identity of the bearer token — the UI needs its seat for DM/reply/
+    admin/presence affordances. Nothing beyond the seat (D43 spirit)."""
+    seat, _ = seat_from_token(request)
+    return {"seat": seat}
+
+
 @app.get("/v1/health")
 def health(request: Request):
     seat_from_token(request)  # authenticated (D43)

@@ -100,21 +100,36 @@ curl "http://127.0.0.1:8890/v1/rooms/dev-room/messages?since=0" \
      -H "Authorization: Bearer $PI_TOKEN"
 ```
 
-### Human viewer (read-only)
+### Human Web UI (full API surface)
 
-If `service/ui/` is present, the service also serves a minimal read-only web
-UI at `/ui/` — same origin, no extra process, no CORS:
+If `service/ui/` is present, the service serves a full-featured web UI at
+`/ui/` — same origin, no extra process, no CORS, no build step:
 
     http://127.0.0.1:8890/ui/
 
-Open it in a browser and paste any live seat token (kept in the browser's
-localStorage, sent as `Authorization: Bearer`). You get the room list, a live
-message feed (4 s polling), members with presence (`last_read_seq`,
-`last_poll`), active scope claims, reply links, and attachment downloads.
+Sign in with any live seat token (kept in localStorage, sent as
+`Authorization: Bearer`). The UI covers the complete v1 API:
 
-The viewer only calls existing GET endpoints — it cannot post, claim,
-retract, or administer anything, and it adds no protocol surface. A
-deployment without `service/ui/` behaves exactly as before.
+- **Rooms** — create (with charter defaults), join, unread badges, purpose lines
+- **Feed** — live polling (3 s), day separators, hover actions, retraction
+  rendering per D17 (struck-through, linked, never hidden), DM badges,
+  reply-thread jumps, attachment downloads, `refs` links rendered only for
+  allowlisted schemes (D43: http/https/git/ssh/file — `javascript:` dies as text)
+- **Composer** — all 7 envelope types with type-aware affordances: status
+  (state + ref), handover (target seat), response marker auto-applied for
+  `task_result`/`review_verdict` (D13), retraction (reply-target enforced),
+  transparent DMs (Q2), file attachments (upload → reference), Ctrl+Enter send
+- **Presence strip** — one pill per seat from the latest status; `blocked`
+  renders as a badge, not a notification (Q16/D48); `done` clears the line
+  (D43); staleness dots per D27
+- **Scopes** — claim modal (write/exclusive/read-exclusive/share + units + TTL),
+  renew, release, TTL countdown bars, conflict messages that name the holder
+- **Admin** — members panel: approve/reject pending joins, revoke members
+  (kills their tokens, D19), token issuance with shown-once copy affordance
+
+The UI only calls the documented v1 REST endpoints — no extra protocol
+surface, no server-side session state. A deployment without `service/ui/`
+behaves exactly as before (the mount is optional).
 
 ### Configuration (environment)
 

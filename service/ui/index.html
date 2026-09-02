@@ -3,159 +3,556 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>HAK · human viewer</title>
+<title>HAK</title>
 <style>
-:root{--bg:#0f1115;--panel:#161a22;--panel2:#1c212c;--line:#2a3040;--fg:#d7dce5;--dim:#8a93a6;--acc:#6ea8fe;--ok:#5ad19c;--warn:#e5b567;--err:#e57373;--mono:ui-monospace,Menlo,Consolas,monospace}
-*{box-sizing:border-box}html,body{height:100%}
-body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.45 system-ui,sans-serif;display:flex;flex-direction:column}
-header{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--line);background:var(--panel)}
-header h1{font-size:15px;margin:0}header .spacer{flex:1}#pollstate{color:var(--dim);font-size:12px}
-button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:12px}
+:root{
+  --bg:#0e1116;--panel:#151a23;--panel2:#1b2230;--panel3:#232c3d;
+  --line:#2a3346;--fg:#dde3ee;--dim:#8b95a9;--faint:#5c6678;
+  --acc:#6ea8fe;--acc2:#8fbcff;--ok:#4fc79b;--warn:#e8b45f;--err:#ee7575;
+  --purple:#b48ef7;--mono:ui-monospace,'Cascadia Code',Menlo,Consolas,monospace;
+  --rad:10px;--shadow:0 4px 24px rgba(0,0,0,.35);
+}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;display:flex;flex-direction:column;overflow:hidden}
+::selection{background:#2e4a75}
+button{background:var(--panel2);color:var(--fg);border:1px solid var(--line);border-radius:7px;padding:6px 12px;cursor:pointer;font-size:13px;transition:border-color .15s,background .15s}
 button:hover{border-color:var(--acc)}
+button:disabled{opacity:.45;cursor:default}
+button.primary{background:var(--acc);border-color:var(--acc);color:#0d1524;font-weight:600}
+button.primary:hover{background:var(--acc2)}
+button.ghost{background:transparent}
+button.danger{color:var(--err);border-color:#5b3236}
+button.danger:hover{border-color:var(--err)}
+button.mini{padding:2px 8px;font-size:11px;border-radius:6px}
+input,select,textarea{background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:7px;padding:7px 10px;font:inherit;font-size:13px}
+input:focus,select:focus,textarea:focus{outline:none;border-color:var(--acc)}
+textarea{resize:vertical;font-family:inherit}
+code{font-family:var(--mono);font-size:.92em}
+
+/* layout */
+header{display:flex;align-items:center;gap:14px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.logo{display:flex;align-items:baseline;gap:8px}
+.logo b{font-size:16px;letter-spacing:.5px}
+.logo span{color:var(--dim);font-size:12px}
+.spacer{flex:1}
+#conn{font-size:12px;color:var(--dim);display:flex;gap:6px;align-items:center}
+#conn .dot{width:8px;height:8px;border-radius:50%;background:var(--err)}
+#conn.ok .dot{background:var(--ok)}
+#conn.degraded .dot{background:var(--warn)}
 main{flex:1;display:flex;min-height:0}
-nav{width:230px;border-right:1px solid var(--line);background:var(--panel);overflow:auto;padding:8px}
-nav .room{padding:7px 10px;border-radius:6px;cursor:pointer;color:var(--dim)}
-nav .room:hover{background:var(--panel2)}nav .room.active{background:var(--panel2);color:var(--fg)}
-nav .room .n{font-weight:600;color:var(--fg)}nav .room .t{font-size:11px}
-section{flex:1;display:flex;flex-direction:column;min-width:0}
-.roomhead{display:flex;align-items:baseline;gap:10px;padding:10px 16px;border-bottom:1px solid var(--line)}
-.roomhead h2{margin:0;font-size:14px}.roomhead .sub{color:var(--dim);font-size:12px}
-#feed{flex:1;overflow:auto;padding:12px 16px;display:flex;flex-direction:column;gap:8px}
-.env{border:1px solid var(--line);border-radius:8px;padding:8px 10px;background:var(--panel)}
-.env.sys{border-style:dashed;background:transparent}
+
+/* rooms nav */
+nav{width:240px;border-right:1px solid var(--line);background:var(--panel);overflow-y:auto;display:flex;flex-direction:column}
+nav .sec{display:flex;align-items:center;padding:12px 14px 6px;color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px}
+nav .sec button{margin-left:auto}
+.room{padding:8px 12px;margin:1px 8px;border-radius:8px;cursor:pointer}
+.room:hover{background:var(--panel2)}
+.room.active{background:var(--panel3)}
+.room .r1{display:flex;align-items:center;gap:8px}
+.room .n{font-weight:600;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.room .sub{color:var(--dim);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-top:1px}
+.room .badge-unread{background:var(--acc);color:#0d1524;font-size:10px;font-weight:700;border-radius:9px;padding:1px 6px;min-width:18px;text-align:center}
+.room .badge-join{background:var(--warn);color:#211a08;font-size:9px;border-radius:4px;padding:1px 5px;text-transform:uppercase;letter-spacing:.4px}
+nav .foot{margin-top:auto;padding:10px 14px;border-top:1px solid var(--line);color:var(--faint);font-size:11px}
+
+/* room body */
+section{flex:1;display:flex;flex-direction:column;min-width:0;background:var(--bg)}
+.roomhead{display:flex;align-items:center;gap:12px;padding:10px 18px;border-bottom:1px solid var(--line);background:var(--panel)}
+.roomhead h2{margin:0;font-size:15px}
+.roomhead .sub{color:var(--dim);font-size:12px;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* presence strip */
+#strip{display:flex;gap:8px;overflow-x:auto;padding:6px 16px;border-bottom:1px solid var(--line);background:var(--panel);min-height:36px;scrollbar-width:thin}
+#strip:empty{display:none}
+.pill{display:flex;align-items:center;gap:6px;border:1px solid var(--line);border-radius:14px;padding:3px 10px;font-size:12px;white-space:nowrap;flex-shrink:0}
+.pill .sd{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.pill.stale .sd{background:var(--faint)}
+.pill.live .sd{background:var(--ok)}
+.pill .st{font-weight:600}
+.pill .st.working_on{color:var(--acc)}
+.pill .st.waiting_on{color:var(--warn)}
+.pill .st.blocked{color:var(--err)}
+.pill .ref{color:var(--dim);font-family:var(--mono);font-size:11px}
+.pill.blocked-pill{border-color:var(--err);background:rgba(238,117,117,.08)}
+.pill .you{color:var(--ok);font-size:10px}
+
+/* feed */
+#newbar{display:none;text-align:center;padding:5px;font-size:12px;color:var(--acc);cursor:pointer;border-bottom:1px solid var(--line);background:rgba(110,168,254,.07)}
+#feed{flex:1;overflow-y:auto;padding:14px 18px;display:flex;flex-direction:column;gap:10px;scroll-behavior:smooth}
+#feed .day{color:var(--faint);font-size:11px;text-transform:uppercase;letter-spacing:.6px;margin:8px 0 2px;align-self:center}
+.env{border:1px solid var(--line);border-radius:var(--rad);padding:9px 12px;background:var(--panel);max-width:960px}
+.env.sys{border-style:dashed;background:transparent;max-width:720px;align-self:center;text-align:center;font-size:12px;color:var(--dim)}
+.env.sys .body{font-size:12px}
 .env .hd{display:flex;gap:8px;align-items:baseline;font-size:12px;color:var(--dim);flex-wrap:wrap}
-.env .hd .seq{font-family:var(--mono);color:var(--acc)}.env .hd .who{color:var(--fg);font-weight:600}
-.badge{font-size:10px;border:1px solid var(--line);border-radius:10px;padding:1px 7px;text-transform:uppercase;letter-spacing:.4px}
-.badge.status{color:var(--warn);border-color:var(--warn)}.badge.task_request{color:var(--acc);border-color:var(--acc)}
+.env .seq{font-family:var(--mono);color:var(--faint);font-size:11px}
+.env .who{color:var(--acc2);font-weight:600}
+.env .who.you{color:var(--ok)}
+.env.retracted{border-color:#5b3236;opacity:.75}
+.env.retracted .body{text-decoration:line-through;color:var(--dim)}
+.env .retract-note{color:var(--err);font-size:11px;margin-top:3px}
+.badge{font-size:10px;border:1px solid;border-radius:9px;padding:1px 7px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+.badge.chat{color:var(--dim);border-color:var(--dim)}
+.badge.status{color:var(--warn);border-color:var(--warn)}
+.badge.task_request{color:var(--acc);border-color:var(--acc)}
 .badge.task_result,.badge.review_verdict{color:var(--ok);border-color:var(--ok)}
-.badge.artifact_ref{color:#c792ea;border-color:#c792ea}.badge.retraction,.badge.admin{color:var(--err);border-color:var(--err)}
-.badge.dm{color:var(--acc);border-color:var(--acc)}
-.env .body{white-space:pre-wrap;word-break:break-word;margin-top:4px}
-.env .atts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
-.env .atts a{font-size:12px;color:var(--acc);cursor:pointer;text-decoration:none;border:1px solid var(--line);border-radius:6px;padding:2px 8px}
-.env .refs{margin-top:6px;font-size:12px}.env .refs code{font-family:var(--mono);font-size:11px;color:var(--warn)}
-.reply{color:var(--dim);font-size:12px;cursor:pointer}.reply:hover{color:var(--acc)}
-aside{width:290px;border-left:1px solid var(--line);background:var(--panel);overflow:auto;padding:10px}
-aside h3{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--dim);margin:10px 0 6px}
-.mem,.scope{border:1px solid var(--line);border-radius:6px;padding:6px 8px;margin-bottom:6px;font-size:12px}
-.st{float:right;font-size:11px}.st.member{color:var(--ok)}.st.pending{color:var(--warn)}.st.revoked{color:var(--err)}
-.sub{color:var(--dim);font-size:11px;margin-top:2px}
-.dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px;background:#3a4152}
-.dot.live{background:var(--ok)}.dot.warm{background:var(--warn)}
-.scope .res{font-family:var(--mono);font-size:11px;word-break:break-all}
-a{color:var(--acc)}footer{border-top:1px solid var(--line);padding:4px 16px;font-size:11px;color:var(--dim);display:flex;gap:12px}
-#newbar{display:none;text-align:center;padding:4px;font-size:12px;color:var(--acc);cursor:pointer;border-bottom:1px solid var(--line)}
-#login{position:fixed;inset:0;background:rgba(8,10,14,.92);display:none;align-items:center;justify-content:center}
-#login .card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:22px;width:440px}
-#login input{width:100%;background:var(--panel2);border:1px solid var(--line);color:var(--fg);border-radius:6px;padding:8px;font-family:var(--mono);font-size:12px;margin-top:8px}
-#login p{color:var(--dim);font-size:12px}.err{color:var(--err);font-size:12px;min-height:16px}
-.dim{color:var(--dim)}code{font-family:var(--mono);font-size:11px;color:var(--warn)}
+.badge.artifact_ref{color:var(--purple);border-color:var(--purple)}
+.badge.retraction{color:var(--err);border-color:var(--err)}
+.badge.admin-op{color:var(--purple);border-color:var(--purple)}
+.badge.dm{color:#6fe3e8;border-color:#6fe3e8}
+.env .body{white-space:pre-wrap;word-break:break-word;margin-top:4px;font-size:14px}
+.atts{margin-top:6px;display:flex;flex-wrap:wrap;gap:6px}
+.atts .att{font-size:12px;color:var(--acc);cursor:pointer;text-decoration:none;border:1px solid var(--line);border-radius:7px;padding:3px 9px;display:inline-flex;gap:6px;align-items:center}
+.atts .att:hover{border-color:var(--acc)}
+.refs{margin-top:6px;font-size:12px;display:flex;flex-direction:column;gap:2px}
+.refs a{color:var(--acc)}
+.refs .note{color:var(--dim)}
+.reply{color:var(--dim);font-size:11px;cursor:pointer;font-family:var(--mono)}
+.reply:hover{color:var(--acc)}
+.env .actions{display:flex;gap:4px;margin-top:6px;opacity:0;transition:opacity .15s}
+.env:hover .actions{opacity:1}
+footer{display:flex;gap:14px;padding:5px 18px;font-size:11px;color:var(--faint);border-top:1px solid var(--line);background:var(--panel)}
+
+/* composer */
+#composer{border-top:1px solid var(--line);background:var(--panel);padding:10px 18px}
+#composer .row1{display:flex;gap:8px;margin-bottom:8px;align-items:center;flex-wrap:wrap}
+#composer select{max-width:150px}
+#replybar{display:none;align-items:center;gap:8px;font-size:12px;color:var(--dim);margin-bottom:6px}
+#replybar .x{cursor:pointer;color:var(--faint)}
+#replybar .x:hover{color:var(--err)}
+#composer textarea{width:100%;min-height:60px;max-height:200px}
+#composer .row3{display:flex;gap:8px;margin-top:8px;align-items:center}
+#composer .hint{color:var(--faint);font-size:11px;flex:1}
+#attachrow{display:flex;gap:6px;flex-wrap:wrap;margin-top:6px}
+#attachrow .file{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--line);border-radius:7px;padding:3px 9px;font-size:12px;color:var(--dim)}
+#attachrow .file .x{cursor:pointer;color:var(--faint)}
+#attachrow .file .x:hover{color:var(--err)}
+#metaextra{display:none;margin-top:8px;padding:8px;border:1px dashed var(--line);border-radius:8px;gap:8px}
+#metaextra .row{display:flex;gap:8px;margin-bottom:6px;align-items:center;flex-wrap:wrap}
+
+/* right side */
+aside{width:300px;border-left:1px solid var(--line);background:var(--panel);overflow-y:auto;display:flex;flex-direction:column}
+aside h3{font-size:11px;text-transform:uppercase;letter-spacing:.6px;color:var(--faint);margin:14px 12px 6px;display:flex;align-items:center;gap:6px}
+aside .box{padding:0 12px 12px}
+.card{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:7px;font-size:12.5px;background:var(--panel2)}
+.card .r1{display:flex;align-items:center;gap:6px}
+.card .r1 .nm{font-weight:600;flex:1}
+.card .sub{color:var(--dim);font-size:11px;margin-top:2px}
+.card .rowbtns{display:flex;gap:5px;margin-top:5px}
+.mono{font-family:var(--mono);font-size:11px}
+.scope-card .res{font-family:var(--mono);font-size:11.5px;word-break:break-all;color:var(--purple)}
+.scope-card .knd{font-weight:700}
+.scope-card .knd.exclusive{color:var(--err)}
+.scope-card .knd.write{color:var(--warn)}
+.scope-card .knd.read-exclusive{color:#6fe3e8}
+.scope-card .knd.share{color:var(--ok)}
+.ttlbar{height:3px;background:var(--line);border-radius:2px;margin-top:5px;overflow:hidden}
+.ttlbar .fill{height:100%;background:var(--ok);transition:width 30s linear}
+.ttl.warn .fill{background:var(--warn)}
+.ttl.low .fill{background:var(--err)}
+
+/* modals */
+.modal{position:fixed;inset:0;background:rgba(6,8,12,.72);display:none;align-items:center;justify-content:center;z-index:50;backdrop-filter:blur(2px)}
+.modal .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;width:480px;max-width:94vw;max-height:88vh;overflow-y:auto;box-shadow:var(--shadow)}
+.modal h3{margin:0 0 14px;font-size:15px}
+.modal label{display:block;font-size:12px;color:var(--dim);margin:10px 0 4px}
+.modal input,.modal select,.modal textarea{width:100%}
+.modal .err{color:var(--err);font-size:12px;min-height:16px;margin-top:8px}
+.modal .rowbtns{display:flex;gap:8px;margin-top:16px;justify-content:flex-end}
+.modal .hint{color:var(--faint);font-size:11.5px;margin-top:4px}
+#login .card{width:430px}
+#login p{color:var(--dim);font-size:12.5px}
+.tokline{display:flex;align-items:center;gap:8px;background:var(--panel3);border:1px solid var(--acc);border-radius:8px;padding:10px;margin-top:10px;flex-wrap:wrap}
+.tokline code{color:var(--warn);word-break:break-all;font-size:12px;flex:1}
+.empty{color:var(--faint);font-size:12px;font-style:italic;padding:4px 0}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--panel3);border:1px solid var(--acc);border-radius:10px;padding:10px 16px;font-size:13px;box-shadow:var(--shadow);z-index:60;display:none;max-width:380px}
+.toast.err{border-color:var(--err)}
+.toast.ok{border-color:var(--ok)}
+.toast code{word-break:break-all;color:var(--warn)}
+.hidden{display:none!important}
+
+/* small screens */
+@media (max-width:1100px){aside{display:none}}
+@media (max-width:860px){nav{display:none}#composer select{max-width:none}}
 </style>
 </head>
 <body>
 <header>
-  <h1>HAK · human viewer</h1><div class=spacer></div>
-  <span id=pollstate></span><button id=forget>forget token</button>
+  <div class="logo"><b>HAK</b><span id="seatlab"></span></div>
+  <div class="spacer"></div>
+  <button class="ghost mini" id="btn-tokens">Tokens</button>
+  <button class="ghost mini" id="btn-logout">Sign out</button>
+  <div id="conn"><span class="dot"></span><span id="connlab">connecting…</span></div>
 </header>
-<div id=newbar>↓ new messages</div>
+
 <main>
-  <nav id=rooms></nav>
+  <nav>
+    <div class="sec">Rooms <button class="mini" id="btn-newroom" title="Create room">+ New</button></div>
+    <div id="rooms"></div>
+    <div class="sec">Join a room</div>
+    <div style="padding:0 12px 12px"><button class="mini" id="btn-joinroom" style="width:100%">Browse &amp; join…</button></div>
+    <div class="foot" id="navfoot"></div>
+  </nav>
+
   <section>
-    <div class=roomhead><h2 id=rname>select a room</h2><span class=sub id=rcharter></span></div>
-    <div id=feed><p class=dim>No room selected.</p></div>
-    <footer><span id=fseq>seq —</span><span id=fcount></span><span style="flex:1"></span><span>read-only v0.1 · same-origin · token in localStorage</span></footer>
+    <div class="roomhead">
+      <h2 id="rname">—</h2><span class="sub" id="rcharter"></span>
+      <button class="ghost mini" id="btn-members">Members</button>
+      <button class="ghost mini" id="btn-claims">Claims</button>
+    </div>
+    <div id="strip"></div>
+    <div id="newbar">↓ <span id="newn">0</span> new messages</div>
+    <div id="feed"></div>
+    <div id="composer" class="hidden">
+      <div id="replybar">↩ replying to <code id="replyid"></code> <span class="x" id="replyx">✕</span></div>
+      <div class="row1">
+        <select id="ctype" title="Envelope type">
+          <option value="chat">💬 chat</option>
+          <option value="status">🚦 status</option>
+          <option value="task_request">📋 task_request</option>
+          <option value="task_result">✅ task_result</option>
+          <option value="artifact_ref">📎 artifact_ref</option>
+          <option value="review_verdict">🔍 review_verdict</option>
+          <option value="retraction">↩ retraction</option>
+        </select>
+        <select id="cto" title="Deliver to (transparent DM, Q2)"><option value="">📣 to everyone</option></select>
+        <button class="ghost mini" id="btn-attach" title="Attach file">📎 Attach</button>
+        <input type="file" id="attach-in" class="hidden" multiple>
+        <button class="ghost mini" id="btn-meta" title="meta (status/handover)">⚙ Options</button>
+      </div>
+      <div id="metaextra">
+        <div class="row" id="strow">
+          <label style="color:var(--dim);font-size:12px">status state:</label>
+          <select id="mstate">
+            <option value="working_on">working_on</option>
+            <option value="waiting_on">waiting_on</option>
+            <option value="blocked">blocked</option>
+            <option value="done">done</option>
+          </select>
+          <input id="mref" placeholder="ref (e.g. file:///repo)" style="flex:1">
+        </div>
+        <div class="row hidden" id="hsrow">
+          <label style="color:var(--dim);font-size:12px">handover for seat:</label>
+          <select id="hfor"><option value="">—</option></select>
+        </div>
+        <div class="row hidden" id="resrow">
+          <span style="color:var(--dim);font-size:12px">meta.kind=response marker — applied automatically (D13 loop guard).</span>
+        </div>
+      </div>
+      <textarea id="cbody" placeholder="Write to the room…  (Ctrl+Enter sends)"></textarea>
+      <div class="row3">
+        <button class="primary" id="csend">Send</button>
+        <span class="hint" id="chint"></span>
+      </div>
+      <div id="attachrow"></div>
+    </div>
+    <footer><span id="fseq">seq —</span><span id="fcount"></span><span class="spacer" style="flex:1"></span><span id="froomfoot"></span></footer>
   </section>
+
   <aside>
-    <h3>Members</h3><div id=mems></div>
-    <h3>Active scopes</h3><div id=scopes></div>
+    <h3>Presence</h3><div class="box" id="membox"></div>
+    <h3>Active scopes</h3><div class="box" id="scopebox"></div>
   </aside>
 </main>
-<div id=login>
-  <div class=card>
-    <h3 style="margin-top:0">HAK access token</h3>
-    <p>This viewer is read-only and talks to the HAK service on this same origin. Paste any live seat token — it is kept in this browser's localStorage and sent as <code>Authorization: Bearer</code>. Issue one host-side: <code>./run.sh --ensure-operator</code> or <code>POST /v1/tokens</code>.</p>
-    <input id=tokin type=password placeholder="paste seat token">
-    <p class=err id=tokerr></p>
-    <button id=tokgo>Connect</button>
+
+<!-- login -->
+<div class="modal" id="login" style="display:flex">
+  <div class="card">
+    <h3>Sign in to HAK</h3>
+    <p>Paste a seat token. It's kept in this browser's localStorage and sent as <code>Authorization: Bearer</code> on every request — same-origin, no cookies needed.</p>
+    <label>Seat token</label>
+    <input id="tokin" type="password" placeholder="paste your token (shown once at issuance)" autocomplete="off">
+    <p class="err" id="tokerr"></p>
+    <div class="rowbtns"><button class="primary" id="tokgo">Sign in</button></div>
+    <p class="hint" style="margin-top:14px">No token? The operator issues them host-side:<br><code>./run.sh --ensure-operator</code> · <code>POST /v1/tokens {"seat": "…"}</code></p>
   </div>
 </div>
+
+<!-- new room -->
+<div class="modal" id="m-newroom">
+  <div class="card">
+    <h3>Create room</h3>
+    <label>Room name <span style="color:var(--faint)">(a-z0-9._-, immutable)</span></label>
+    <input id="nrname" placeholder="e.g. dev-room">
+    <label>Purpose</label>
+    <input id="nrpurp" placeholder="one line — what is this room for?">
+    <label>Default claim TTL (minutes)</label>
+    <input id="nrttl" type="number" value="30" min="1" max="1440">
+    <label>Share capacities <span style="color:var(--faint)">(scheme: units, JSON)</span></label>
+    <input id="nrcap" value='{"gpu": 2, "file": 2}' class="mono">
+    <label>Max file size (bytes)</label>
+    <input id="nrfile" type="number" value="26214400">
+    <p class="err" id="nrerr"></p>
+    <div class="rowbtns"><button class="ghost" onclick="closeModal('m-newroom')">Cancel</button><button class="primary" id="nrgo">Create</button></div>
+  </div>
+</div>
+
+<!-- join room (browse public rooms) -->
+<div class="modal" id="m-join">
+  <div class="card">
+    <h3>Join a room</h3>
+    <p style="color:var(--dim);font-size:12.5px">v1 rooms are discovered by name (no directory endpoint). Enter a room name to join — the admin approves your pending membership.</p>
+    <label>Room name</label>
+    <input id="jrname" placeholder="room name as told by the admin">
+    <p class="err" id="jrerr"></p>
+    <div class="rowbtns"><button class="ghost" onclick="closeModal('m-join')">Cancel</button><button class="primary" id="jrgo">Join</button></div>
+  </div>
+</div>
+
+<!-- members / admin -->
+<div class="modal" id="m-members">
+  <div class="card">
+    <h3 id="mm-title">Members</h3>
+    <div id="mm-body"></div>
+    <p class="err" id="mm-err"></p>
+  </div>
+</div>
+
+<!-- scope claim -->
+<div class="modal" id="m-claim">
+  <div class="card">
+    <h3>Claim a resource</h3>
+    <label>Resource URI</label>
+    <input id="cluri" class="mono" placeholder="gpu://render-0  ·  file:///repo/checkout">
+    <label>Kind</label>
+    <select id="clkind">
+      <option value="write">write — only I write, others may share-read</option>
+      <option value="exclusive">exclusive — nobody else at all</option>
+      <option value="read-exclusive">read-exclusive — only I read</option>
+      <option value="share">share — concurrent units (e.g. GPU slots)</option>
+    </select>
+    <div id="clunitsrow" class="hidden"><label>Units (share)</label><input id="clunits" type="number" value="1" min="1" style="width:100px"></div>
+    <label>TTL override (minutes) <span style="color:var(--faint)">— clamped to charter</span></label>
+    <input id="clttl" type="number" placeholder="charter default" min="1" max="1440" style="width:120px">
+    <p class="err" id="clerr"></p>
+    <div class="rowbtns"><button class="ghost" onclick="closeModal('m-claim')">Cancel</button><button class="primary" id="clgo">Claim</button></div>
+  </div>
+</div>
+
+<!-- tokens -->
+<div class="modal" id="m-tokens">
+  <div class="card">
+    <h3>Tokens</h3>
+    <p style="color:var(--dim);font-size:12.5px">Issue a token for a seat (admin). The secret is shown <b>once</b> — copy it now.</p>
+    <label>Seat name</label>
+    <div style="display:flex;gap:8px"><input id="tkseat" placeholder="e.g. pi-50" style="flex:1"><button class="primary" id="tkissue">Issue</button></div>
+    <p class="err" id="tkerr"></p>
+    <div id="tkout"></div>
+  </div>
+</div>
+
+<!-- confirm -->
+<div class="modal" id="m-confirm">
+  <div class="card">
+    <h3 id="cf-title">Confirm</h3>
+    <p id="cf-body" style="color:var(--dim)"></p>
+    <div class="rowbtns"><button class="ghost" onclick="closeModal('m-confirm')">Cancel</button><button class="danger" id="cfgo">Do it</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
 <script>
 "use strict";
-const $=(i)=>document.getElementById(i), enc=encodeURIComponent;
-const S={token:localStorage.getItem("hak_viewer_token")||"",rooms:[],room:null,seq:0,map:new Map(),unread:0};
+/* HAK web UI — full API surface, single file, same-origin. */
+const $=(i)=>document.getElementById(i),enc=encodeURIComponent;
+const ALLOWED_SCHEMES=["http:","https:","git:","ssh:","file:"];          // D43
+const TYPES=["chat","status","task_request","task_result","artifact_ref","review_verdict","retraction"];
+const S={token:localStorage.getItem("hak_token")||"",seat:"",room:null,seq:0,map:new Map(),
+         rooms:[],unread:0,retractTargets:new Set(),lastType:"chat",attach:[]};
+let poller=null,sideTimer=null;
+
+/* ---------- tiny helpers ---------- */
 function el(t,c,x){const e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
-const fmtTs=(t)=>{try{return new Date(t).toLocaleTimeString()}catch(e){return t||""}};
-function ago(iso){if(!iso)return"never";const s=(Date.now()-new Date(iso).getTime())/1e3;if(!isFinite(s)||s<0)return"now";if(s<60)return Math.round(s)+"s ago";if(s<3600)return Math.round(s/60)+"m ago";return Math.round(s/3600)+"h ago"}
-function badge(c,x){return el("span","badge "+c,x)}
-async function api(p){
-  const r=await fetch(p,{headers:{Authorization:"Bearer "+S.token}});
-  if(r.status===401){showLogin("Token rejected (401) — paste a fresh seat token.");throw new Error("401")}
-  if(!r.ok)throw new Error(p+" → HTTP "+r.status);
-  return r.json();
+function fmtTs(t){try{return new Date(t).toLocaleString([],{month:"short",day:"numeric",hour:"2-digit",minute:"2-digit"})}catch(e){return t||""}}
+function dayOf(t){try{return new Date(t).toLocaleDateString([],{weekday:"long",month:"short",day:"numeric"})}catch(e){return""}}
+function ago(iso){if(!iso)return"never";const s=(Date.now()-new Date(iso).getTime())/1e3;if(!isFinite(s)||s<0)return"now";if(s<60)return Math.round(s)+"s";if(s<3600)return Math.round(s/60)+"m";if(s<86400)return Math.round(s/3600)+"h";return Math.round(s/86400)+"d"}
+function esc(s){return String(s==null?"":s)}
+function toast(msg,cls){const t=$("toast");t.innerHTML="";t.appendChild(document.createTextNode(msg));t.className="toast "+(cls||"ok");t.style.display="block";clearTimeout(t._h);t._h=setTimeout(()=>t.style.display="none",cls==="err"?6000:3500)}
+function closeModal(id){$(id).style.display="none"}
+function openModal(id){$(id).style.display="flex"}
+
+/* ---------- API ---------- */
+async function api(method,path,body,raw){
+  const opt={method,headers:{Authorization:"Bearer "+S.token}};
+  if(body!=null&&!raw){opt.headers["Content-Type"]="application/json";opt.body=JSON.stringify(body)}
+  if(body!=null&&raw)opt.body=body;
+  const r=await fetch(path,opt);
+  if(r.status===204)return null;
+  let j=null;try{j=await r.json()}catch(e){}
+  if(!r.ok){const e=(j&&j.error)||{};const err=new Error(e.message||("HTTP "+r.status));err.code=e.code;err.status=r.status;err.detail=e.detail;throw err}
+  return j;
 }
-async function refreshRooms(){S.rooms=await api("/v1/rooms");renderRooms()}
+const GET=(p)=>api("GET",p);
+const POST=(p,b)=>api("POST",p,b);
+const DEL=(p)=>api("DELETE",p);
+
+/* ---------- login ---------- */
+$("tokgo").onclick=async()=>{const t=$("tokin").value.trim();if(!t){$("tokerr").textContent="paste a token";return}
+  try{
+    const r=await fetch("/v1/whoami",{headers:{Authorization:"Bearer "+t}});
+    if(r.status===401){$("tokerr").textContent="rejected — not a live token";return}
+    if(!r.ok){$("tokerr").textContent="HTTP "+r.status;return}
+    const j=await r.json();
+    S.token=t;S.seat=j.seat;localStorage.setItem("hak_token",t);
+    $("login").style.display="none";$("tokin").value="";$("tokerr").textContent="";
+    boot();
+  }catch(e){$("tokerr").textContent=String(e)}};
+$("tokin").addEventListener("keydown",e=>{if(e.key==="Enter")$("tokgo").onclick()});
+$("btn-logout").onclick=()=>{localStorage.removeItem("hak_token");location.reload()};
+
+/* ---------- boot ---------- */
+async function boot(){
+  if(!S.token){openModal("login");return}
+  $("login").style.display="none";
+  $("seatlab").textContent=S.seat?("seat "+S.seat):"";
+  try{S.seat=(await GET("/v1/whoami")).seat;$("seatlab").textContent="seat "+S.seat}catch(e){}
+  await refreshRooms();
+  startPolling();
+  $("conn").className="ok";$("connlab").textContent="live";
+  if(S.room){selectRoom(S.room,true)}else if(S.rooms.length){selectRoom(S.rooms[0].name)}
+}
+
+/* ---------- rooms ---------- */
+async function refreshRooms(){
+  try{S.rooms=await GET("/v1/rooms")}catch(e){S.rooms=[]}
+  renderRooms();
+}
 function renderRooms(){
   const n=$("rooms");n.textContent="";
   for(const r of S.rooms){
     const d=el("div","room"+(r.name===S.room?" active":""));
-    d.appendChild(el("div","n",r.name));
-    const t=r.charter&&(r.charter.topic||r.charter.purpose||r.charter.description);
-    if(t)d.appendChild(el("div","t",String(t)));
-    d.onclick=()=>selectRoom(r.name);n.appendChild(d);
+    const r1=el("div","r1");
+    r1.appendChild(el("span","n",r.name));
+    const u=roomUnread(r.name);
+    if(u>0)r1.appendChild(el("span","badge-unread",String(u)));
+    if(r._status==="pending")r1.appendChild(el("span","badge-join","pending"));
+    d.appendChild(r1);
+    const t=r.charter&&(r.charter.purpose||r.charter.topic||r.charter.description);
+    if(t)d.appendChild(el("div","sub",String(t)));
+    d.onclick=()=>selectRoom(r.name);
+    n.appendChild(d);
   }
-  if(!S.rooms.length)n.appendChild(el("div","room","no rooms yet"));
+  if(!S.rooms.length)n.appendChild(el("div","room","no rooms — create or join one"));
+  const ur=S.rooms.map(r=>roomUnread(r.name)).reduce((a,b)=>a+b,0);
+  document.title=(ur?`(${ur}) `:"")+"HAK";
 }
-async function selectRoom(name){
-  S.room=name;S.seq=0;S.map.clear();S.unread=0;$("newbar").style.display="none";
-  const f=$("feed");f.textContent="";f.appendChild(el("p","dim","loading…"));
-  const ch=(S.rooms.find((r)=>r.name===name)||{}).charter||{};
+function roomUnread(name){
+  const u=JSON.parse(localStorage.getItem("hak_read_"+S.seat)||"{}");
+  const last=u[name]||0;
+  // approximate: cursor gap vs maxSeq we saw; precise per-room max seq unknown until selected
+  const mx=JSON.parse(localStorage.getItem("hak_maxseq_"+S.seat)||"{}")[name];
+  return mx?Math.max(0,mx-last):0;
+}
+
+/* ---------- select room ---------- */
+async function selectRoom(name,keepCursor){
+  if(!S.room||S.room!==name){S.seq=0;S.map.clear();S.retractTargets=new Set()}
+  S.room=name;
+  if(!keepCursor){S.seq=0;S.map.clear();S.retractTargets=new Set()}
+  const r=S.rooms.find(x=>x.name===name);
   $("rname").textContent=name;
-  $("rcharter").textContent=ch.topic||ch.purpose||ch.description||"";
+  $("rcharter").textContent=r&&r.charter?(r.charter.purpose||r.charter.topic||""):"";
   renderRooms();
-  try{await loadHistory();await refreshSide()}catch(e){f.textContent="";f.appendChild(el("p","err",String(e)))}
+  $("feed").textContent="";
+  const f=$("feed");f.appendChild(el("p","empty","loading…"));
+  try{
+    await loadHistory();
+    await refreshSide();
+    await refreshMembersAffordances();
+    markRoomRead();
+    $("composer").classList.remove("hidden");
+    const ch=(r&&r.charter)||{};
+    $("froomfoot").textContent=(ch.claim_policy?("TTL "+ch.claim_policy.default_ttl_min+"m"):"");
+  }catch(e){
+    f.textContent="";f.appendChild(el("p","empty",String(e.message)));
+    if(e.status===403)toast("Not a member of "+name+" (join first)","err");
+  }
 }
+async function refreshMembersAffordances(){
+  // populate DM target select + handover target select
+  try{
+    const mems=await GET("/v1/rooms/"+enc(S.room)+"/members");
+    const toSel=$("cto");toSel.innerHTML="";toSel.appendChild(new Option("📣 to everyone",""));
+    const hSel=$("hfor");hSel.innerHTML="";hSel.appendChild(new Option("—",""));
+    for(const m of mems){
+      if(m.seat===S.seat)continue;
+      toSel.appendChild(new Option("→ "+m.seat+" only (visible to all)",m.seat));
+      hSel.appendChild(new Option(m.seat,m.seat));
+    }
+  }catch(e){}
+}
+function markRoomRead(){
+  if(!S.room)return;
+  try{
+    POST("/v1/rooms/"+enc(S.room)+"/read",{seq:S.seq}).catch(()=>{});
+    const u=JSON.parse(localStorage.getItem("hak_read_"+S.seat)||"{}");
+    u[S.room]=S.seq;localStorage.setItem("hak_read_"+S.seat,JSON.stringify(u));
+    const mx=JSON.parse(localStorage.getItem("hak_maxseq_"+S.seat)||"{}");
+    mx[S.room]=S.seq;localStorage.setItem("hak_maxseq_"+S.seat,JSON.stringify(mx));
+    renderRooms();
+  }catch(e){}
+}
+
+/* ---------- feed rendering ---------- */
 async function loadHistory(){
   let until=null,pages=0;const all=[];
   for(;;){
     const q=new URLSearchParams({limit:"200",order:"desc"});
     if(until!=null)q.set("until",String(until));
-    const d=await api("/v1/rooms/"+enc(S.room)+"/messages?"+q.toString());
+    const d=await GET("/v1/rooms/"+enc(S.room)+"/messages?"+q);
     all.push(...d.messages);
     if(!d.has_more||!d.messages.length||++pages>=10)break;
     until=d.messages[d.messages.length-1].seq-1;
   }
   all.reverse();
   const f=$("feed");f.textContent="";
-  if(!all.length)f.appendChild(el("p","dim","empty room — no envelopes yet."));
-  for(const m of all)appendEnv(m,true);
+  if(!all.length)f.appendChild(el("p","empty","Empty room. Say hello 👋"));
+  let lastDay="";
+  for(const m of all){
+    const d=dayOf(m.ts);
+    if(d!==lastDay){f.appendChild(el("div","day",d));lastDay=d}
+    f.appendChild(envEl(m));
+    if(m.type==="retraction"&&m.reply_to)S.retractTargets.add(m.reply_to);
+  }
   S.seq=all.length?all[all.length-1].seq:0;
-  $("fcount").textContent=all.length+" envelopes loaded";
+  $("fcount").textContent=all.length+" envelopes";
   $("fseq").textContent="seq "+(S.seq||"—");
   f.scrollTop=f.scrollHeight;
 }
 function envEl(m){
   const sys=m.meta&&m.meta.kind==="admin-op";
-  const e=el("div","env"+(sys?" sys":""));e.id="env-"+m.id;
+  const retracted=S.retractTargets.has(m.id);
+  const e=el("div","env"+(sys?" sys":"")+(retracted?" retracted":""));e.id="env-"+m.id;
   const hd=el("div","hd");
   hd.appendChild(el("span","seq","#"+m.seq));
-  hd.appendChild(el("span","who",m.from&&m.from.seat||"?"));
-  if(m.from&&m.from.backend)hd.appendChild(el("span","dim",m.from.backend));
-  hd.appendChild(badge(sys?"admin":m.type||"chat",sys?m.meta.kind:m.type||"chat"));
-  if(m.to&&m.to.seat)hd.appendChild(badge("dm","→ "+m.to.seat));
-  if(m.reply_to){const rp=el("span","reply","↩ "+m.reply_to);
-    rp.onclick=()=>{const t=$("env-"+m.reply_to);if(t){t.scrollIntoView({block:"center"});t.style.outline="1px solid var(--acc)";setTimeout(()=>{t.style.outline=""},1200)}};
-    hd.appendChild(rp)}
+  const who=el("span","who"+((m.from&&m.from.seat)===S.seat?" you":""),m.from&&m.from.seat||"?");
+  hd.appendChild(who);
+  if(m.from&&m.from.backend)hd.appendChild(el("span","",m.from.backend));
+  hd.appendChild(el("span","badge "+(sys?"admin-op":m.type),sys?"admin-op":m.type||"chat"));
+  if(m.to&&m.to.seat)hd.appendChild(el("span","badge dm","→ "+m.to.seat));
+  if(m.reply_to){
+    const rp=el("span","reply","↩ #"+m.reply_to);
+    rp.title="jump to "+m.reply_to;
+    rp.onclick=()=>{const t=$("env-"+m.reply_to);if(t){t.scrollIntoView({block:"center",behavior:"smooth"});t.style.outline="1px solid var(--acc)";setTimeout(()=>t.style.outline="",1200)}};
+    hd.appendChild(rp);
+  }
   hd.appendChild(el("span","",fmtTs(m.ts)));
   e.appendChild(hd);
-  e.appendChild(el("div","body",m.body));
+  const body=el("div","body",m.body);
+  e.appendChild(body);
+  if(retracted)e.appendChild(el("div","retract-note","↩ retracted — see the retraction envelope linked above"));
   if(m.refs&&m.refs.length){
     const rx=el("div","refs");
     for(const ref of m.refs){
       const uri=typeof ref==="string"?ref:ref&&ref.uri,note=ref&&ref.note;
       const ln=el("div");
-      if(typeof uri==="string"&&/^https?:/i.test(uri)){const a=el("a","",uri);a.href=uri;a.target="_blank";a.rel="noopener noreferrer";ln.appendChild(a)}
-      else if(uri)ln.appendChild(el("code","",uri));
-      if(note)ln.appendChild(el("span","dim"," — "+note));
+      let linked=false;
+      if(typeof uri==="string"){
+        try{const u=new URL(uri);if(ALLOWED_SCHEMES.includes(u.protocol)){const a=el("a","",uri);a.href=uri;a.target="_blank";a.rel="noopener noreferrer";ln.appendChild(a);linked=true}}catch(_){}
+      }
+      if(!linked&&uri)ln.appendChild(el("code","",uri));      // D43: non-allowlisted = plain text
+      if(note)ln.appendChild(el("span","note"," — "+note));
       if(ln.childNodes.length)rx.appendChild(ln);
     }
     if(rx.childNodes.length)e.appendChild(rx);
@@ -164,95 +561,351 @@ function envEl(m){
     const at=el("div","atts");
     for(const a of m.attachments){
       const id=typeof a==="string"?a:a&&a.file_id;if(!id)continue;
-      const l=el("a","","↓ "+(a&&a.name||id));
-      l.onclick=()=>download(id,a&&a.name);at.appendChild(l);
+      const name=(a&&a.name)||id;
+      const l=el("span","att","📄 "+name);
+      l.title="download "+name;
+      l.onclick=()=>download(id,name);
+      at.appendChild(l);
     }
     if(at.childNodes.length)e.appendChild(at);
   }
-  return e;
-}
-function appendEnv(m,silent){
-  if(S.map.has(m.id))return;
-  S.map.set(m.id,m);
-  const f=$("feed"),near=f.scrollHeight-f.scrollTop-f.clientHeight<90;
-  const p=f.querySelector("p");if(p)p.remove();
-  f.appendChild(envEl(m));
-  $("fseq").textContent="seq "+m.seq;
-  $("fcount").textContent=S.map.size+" envelopes";
-  if(!silent){
-    if(near)f.scrollTop=f.scrollHeight;
-    else{S.unread++;const nb=$("newbar");nb.textContent="↓ "+S.unread+" new message"+(S.unread>1?"s":"");nb.style.display="block"}
+  /* hover actions */
+  if(!sys){
+    const ac=el("div","actions");
+    if(!retracted){
+      const rp=el("button","mini","reply");rp.onclick=()=>openReply(m);ac.appendChild(rp);
+      if(m.type!=="retraction"){
+        const rt=el("button","mini danger","retract");
+        rt.onclick=()=>askConfirm("Retract #"+m.seq+"?","The message stays visible (struck through), marked with your retraction. This cannot be undone.",()=>doRetract(m));
+        ac.appendChild(rt);
+      }
+    }
+    if(ac.childNodes.length)e.appendChild(ac);
   }
+  return e;
 }
 async function download(id,name){
   try{
     const r=await fetch("/v1/files/"+enc(id),{headers:{Authorization:"Bearer "+S.token}});
     if(!r.ok)throw new Error("HTTP "+r.status);
-    const b=await r.blob(),u=URL.createObjectURL(b),a=el("a");
+    const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement("a");
     a.href=u;a.download=name||id;document.body.appendChild(a);a.click();a.remove();
     setTimeout(()=>URL.revokeObjectURL(u),5000);
-  }catch(e){alert("download failed: "+e.message)}
+  }catch(e){toast("download failed: "+e.message,"err")}
 }
+
+/* ---------- polling ---------- */
+function startPolling(){
+  if(poller)clearInterval(poller);
+  poller=setInterval(async()=>{
+    if(document.hidden||!S.room)return;
+    try{
+      const d=await GET("/v1/rooms/"+enc(S.room)+"/messages?since="+S.seq+"&limit=300");
+      if(d.messages&&d.messages.length){
+        const f=$("feed"),near=f.scrollHeight-f.scrollTop-f.clientHeight<120;
+        for(const m of d.messages){
+          if(S.map.has(m.id))continue;S.map.set(m.id,m);
+          if(m.type==="retraction"&&m.reply_to){
+            S.retractTargets.add(m.reply_to);
+            const tgt=$("env-"+m.reply_to);if(tgt){tgt.classList.add("retracted");tgt.appendChild(el("div","retract-note","↩ retracted by "+m.from.seat))}
+          }
+          const dd=dayOf(m.ts);
+          const dayEls=[...f.querySelectorAll(".day")];
+          if(dayEls.length===0||dayEls[dayEls.length-1].textContent!==dd)f.appendChild(el("div","day",dd));
+          f.appendChild(envEl(m));
+          S.seq=m.seq;
+        }
+        if(near)f.scrollTop=f.scrollHeight;
+        else{S.unread+=d.messages.length;$("newn").textContent=S.unread;$("newbar").style.display="block"}
+        markRoomRead();
+      }
+      $("conn").className="ok";$("connlab").textContent="live";
+    }catch(e){
+      $("conn").className="degraded";$("connlab").textContent=e.status===401?"token rejected":"error";
+      if(e.status===401){S.token="";localStorage.removeItem("hak_token");location.reload()}
+    }
+  },3000);
+  if(sideTimer)clearInterval(sideTimer);
+  sideTimer=setInterval(()=>{if(!document.hidden&&S.room)refreshSide()},10000);
+}
+$("newbar").onclick=()=>{$("feed").scrollTop=$("feed").scrollHeight;S.unread=0;$("newbar").style.display="none"};
+
+/* ---------- side: members + scopes ---------- */
 async function refreshSide(){
   if(!S.room)return;
   try{
-    const mems=await api("/v1/rooms/"+enc(S.room)+"/members"),box=$("mems");box.textContent="";
+    const mems=await GET("/v1/rooms/"+enc(S.room)+"/members");
+    const mb=$("membox");mb.textContent="";
     for(const m of mems){
-      const d=el("div","mem"),h=el("div");
-      const lp=m.last_poll?(Date.now()-new Date(m.last_poll).getTime())/1e3:null;
-      h.appendChild(el("span","dot"+(lp!=null&&lp<30?" live":lp!=null&&lp<300?" warm":"")));
-      h.appendChild(el("span","",m.seat));
-      h.appendChild(el("span","st "+m.status,m.status));
-      d.appendChild(h);
-      d.appendChild(el("div","sub","read #"+(m.last_read_seq!=null?m.last_read_seq:"—")+" · poll "+ago(m.last_poll)));
-      box.appendChild(d);
+      const live=m.last_poll&&(Date.now()-new Date(m.last_poll).getTime())/1e3<900;  // D27: 15m staleness
+      const wrap=el("div","card");
+      const pill=el("div","pill"+(live?" live":" stale"));
+      pill.appendChild(el("span","sd"));
+      pill.appendChild(el("span",null,m.seat+(m.seat===S.seat?" (you)":"")));
+      const st=el("span",null,m.status);
+      st.style.color=m.status==="member"?"var(--ok)":m.status==="pending"?"var(--warn)":"var(--err)";
+      pill.appendChild(st);
+      wrap.appendChild(pill);
+      wrap.appendChild(el("div","sub","read #"+(m.last_read_seq!=null?m.last_read_seq:"—")+" · poll "+ago(m.last_poll)));
+      mb.appendChild(wrap);
     }
-  }catch(e){$("mems").textContent=String(e)}
+  }catch(e){}
   try{
-    const sc=await api("/v1/rooms/"+enc(S.room)+"/scopes"),act=sc.active||[],box=$("scopes");box.textContent="";
-    if(!act.length)box.appendChild(el("div","sub","no active claims"));
+    const sc=await GET("/v1/rooms/"+enc(S.room)+"/scopes");
+    const act=(sc&&sc.active)||[],sb=$("scopebox");sb.textContent="";
+    if(!act.length)sb.appendChild(el("div","empty","no active claims"));
     for(const s of act){
-      const d=el("div","scope");
-      d.appendChild(el("div","res",s.resource_uri||s.uri||s.scope_id||"?"));
-      let mins=null;if(s.expires_at)mins=Math.round((new Date(s.expires_at).getTime()-Date.now())/6e4);
-      d.appendChild(el("div","sub",(s.seat||s.from_seat||"?")+" · "+(s.kind||"?")+(s.units!=null?" · x"+s.units:"")+(mins!=null?" · expires "+mins+"m":"")));
-      box.appendChild(d);
+      const c=el("div","card scope-card");
+      const r1=el("div","r1");
+      r1.appendChild(el("span","res",s.resource_uri));
+      c.appendChild(r1);
+      const sub=el("div","sub");
+      sub.appendChild(el("span","knd "+s.kind,s.kind+(s.units>1?" ×"+s.units:"")));
+      sub.appendChild(el("span","",s.seat));
+      let mins=null;if(s.expires_at)mins=(new Date(s.expires_at).getTime()-Date.now())/6e4;
+      c.appendChild(sub);
+      if(mins!=null&&isFinite(mins)){
+        const bar=el("div","ttlbar");const fill=el("div","fill");
+        const frac=Math.max(0,Math.min(1,mins/30));
+        fill.style.width=(frac*100)+"%";
+        if(mins<10){bar.className="ttlbar low";fill.style.width=Math.max(3,mins/30*100)+"%"}
+        else if(mins<20)bar.className="ttlbar warn";
+        bar.appendChild(fill);c.appendChild(bar);
+        c.appendChild(el("div","sub","expires in "+Math.round(mins)+"m"));
+      }
+      if(s.seat===S.seat){
+        const rb=el("div","rowbtns");
+        const rn=el("button","mini","renew");rn.onclick=()=>doRenew(s.scope_id);
+        const rl=el("button","mini danger","release");rl.onclick=()=>askConfirm("Release "+s.resource_uri+"?","Your claim ends immediately; others may claim.",()=>doRelease(s.scope_id));
+        rb.appendChild(rn);rb.appendChild(rl);c.appendChild(rb);
+      }
+      sb.appendChild(c);
     }
-  }catch(e){$("scopes").textContent=String(e)}
+  }catch(e){}
 }
-async function pollTick(){
-  if(document.hidden||!S.room||!S.token)return;
+
+/* ---------- presence strip ---------- */
+async function refreshStrip(){
+  if(!S.room)return;
   try{
-    const d=await api("/v1/rooms/"+enc(S.room)+"/messages?since="+S.seq+"&limit=300&order=asc");
-    for(const m of d.messages)appendEnv(m,false);
-    $("pollstate").textContent="live · poll 4s";
-  }catch(e){$("pollstate").textContent="error: "+e.message}
+    const st=await GET("/v1/rooms/"+enc(S.room)+"/messages?type=status&limit=200&order=desc");
+    const bySeat=new Map();
+    for(const m of (st.messages||[])){if(!bySeat.has(m.from.seat))bySeat.set(m.from.seat,m)}
+    const strip=$("strip");strip.textContent="";
+    for(const [seat,m] of bySeat){
+      const state=m.meta&&m.meta.state;
+      if(!state)continue;
+      if(state==="done")continue;                       // D43: done clears the line
+      const p=el("div","pill"+(state==="blocked"?" blocked-pill":""));
+      p.appendChild(el("span","sd"));
+      p.appendChild(el("span","",seat));
+      p.appendChild(el("span","st "+state,state));
+      if(m.meta.ref)p.appendChild(el("span","ref",m.meta.ref));
+      strip.appendChild(p);
+    }
+  }catch(e){}
 }
-setInterval(pollTick,4000);
-setInterval(()=>{if(!document.hidden&&S.room&&S.token)refreshSide()},12000);
-function showLogin(msg){$("login").style.display="flex";if(msg)$("tokerr").textContent=msg}
-$("tokgo").onclick=async()=>{
-  const t=$("tokin").value.trim();
-  if(!t){$("tokerr").textContent="paste a token first";return}
-  try{
-    const r=await fetch("/v1/rooms",{headers:{Authorization:"Bearer "+t}});
-    if(r.status===401){$("tokerr").textContent="rejected (401) — not a live seat token";return}
-    if(!r.ok){$("tokerr").textContent="HTTP "+r.status;return}
-    S.token=t;localStorage.setItem("hak_viewer_token",t);
-    $("login").style.display="none";$("tokerr").textContent="";$("tokin").value="";
-    boot();
-  }catch(e){$("tokerr").textContent=String(e)}
+
+/* ---------- composer ---------- */
+let replyTarget=null;
+function openReply(m){replyTarget=m;$("replybar").style.display="flex";$("replyid").textContent=m.id+" · #"+m.seq+" "+(m.from?m.from.seat:"");$("cbody").focus()}
+$("replyx").onclick=()=>{replyTarget=null;$("replybar").style.display="none"};
+$("ctype").onchange=()=>{
+  const t=$("ctype").value;
+  $("metaextra").style.display=["status","task_result","review_verdict","artifact_ref","retraction"].includes(t)?"block":"none";
+  $("strow").classList.toggle("hidden",t!=="status");
+  $("hsrow").classList.toggle("hidden",t!=="artifact_ref");
+  $("resrow").classList.toggle("hidden",!(t==="task_result"||t==="review_verdict"));
+  if(t==="retraction"&&!replyTarget){toast("retraction needs a target — click ↩ reply on the message first","err")}
 };
-$("tokin").addEventListener("keydown",(ev)=>{if(ev.key==="Enter")$("tokgo").onclick()});
-$("forget").onclick=()=>{localStorage.removeItem("hak_viewer_token");location.reload()};
-$("newbar").onclick=()=>{$("feed").scrollTop=$("feed").scrollHeight;S.unread=0;$("newbar").style.display="none"};
-async function boot(){
-  if(!S.token){showLogin();return}
-  $("login").style.display="none";
-  try{await refreshRooms()}catch(e){return}
-  if(!S.room&&S.rooms.length)selectRoom(S.rooms[0].name);
-  else if(!S.rooms.length)$("rooms").textContent="no rooms yet";
+$("btn-meta").onclick=()=>{const x=$("metaextra");x.style.display=x.style.display==="block"?"none":"block";$("ctype").onchange()};
+$("clunitsrow");$("clkind").onchange=()=>$("clunitsrow").classList.toggle("hidden",$("clkind").value!=="share");
+$("btn-attach").onclick=()=>$("attach-in").click();
+$("attach-in").onchange=()=>{
+  for(const file of $("attach-in").files){if(!S.attach.some(a=>a.file===file&&a.name===file.name))S.attach.push({file,name:file.name})}
+  renderAttach();$("attach-in").value="";
+};
+function renderAttach(){
+  const r=$("attachrow");r.textContent="";
+  for(const a of S.attach){
+    const d=el("span","file",a.name+" ("+Math.round(a.file.size/1024)+" KB)");
+    const x=el("span","x","✕");x.onclick=()=>{S.attach=S.attach.filter(z=>z!==a);renderAttach()};
+    d.appendChild(x);r.appendChild(d);
+  }
 }
+$("cbody").addEventListener("keydown",e=>{if((e.ctrlKey||e.metaKey)&&e.key==="Enter"){e.preventDefault();$("csend").onclick()}});
+$("csend").onclick=async()=>{
+  if(!S.room)return;
+  const type=$("ctype").value;
+  let body=$("cbody").value;
+  if(type==="retraction"&&!replyTarget){toast("retraction needs a reply target (D37)","err");return}
+  const payload={type,body};
+  const cmid="web-"+S.seat+"-"+Date.now();
+  payload.client_msg_id=cmid;
+  if(replyTarget&&type!=="retraction")payload.reply_to=replyTarget.id;
+  if(type==="retraction")payload.reply_to=replyTarget.id;
+  const to=$("cto").value;if(to)payload.to={seat:to};
+  const meta={};
+  if(type==="status"){meta.kind="status";meta.state=$("mstate").value;if($("mref").value.trim())meta.ref=$("mref").value.trim()}
+  if(type==="artifact_ref"&&$("hfor").value){meta.kind="handover";meta.for_seat=$("hfor").value}
+  if(type==="task_result"||type==="review_verdict"){meta.kind="response"}
+  if(Object.keys(meta).length)payload.meta=meta;
+  /* attachments: upload first, then reference */
+  try{
+    if(S.attach.length){
+      const ids=[];
+      for(const a of S.attach){
+        const fd=new FormData();fd.append("room",S.room);fd.append("file",a.file,a.name);
+        const r=await fetch("/v1/files",{method:"POST",headers:{Authorization:"Bearer "+S.token},body:fd});
+        const j=await r.json();
+        if(!r.ok)throw new Error((j.error&&j.error.message)||("upload HTTP "+r.status));
+        ids.push({file_id:j.file_id,name:a.name});
+      }
+      payload.attachments=ids;S.attach=[];renderAttach();
+    }
+    const res=await POST("/v1/rooms/"+enc(S.room)+"/messages",payload);
+    if(res&&res.seq>S.seq){S.seq=res.seq}
+    $("cbody").value="";replyTarget=null;$("replybar").style.display="none";
+    toast(res&&res.id?"sent · #"+res.seq:"sent");
+    // immediate poll catches it
+  }catch(e){
+    toast(e.code==="idempotency_conflict"?"client_msg_id conflict — not resent":"send failed: "+e.message,"err");
+    if(e.code==="idempotency_conflict")$("cbody").value="";
+  }
+};
+
+/* ---------- retract ---------- */
+async function doRetract(m){
+  try{
+    await POST("/v1/rooms/"+enc(S.room)+"/messages",{type:"retraction",body:"retracted via web UI",reply_to:m.id,client_msg_id:"web-rt-"+m.id+"-"+Date.now()});
+    S.retractTargets.add(m.id);
+    const tgt=$("env-"+m.id);if(tgt){tgt.classList.add("retracted");tgt.appendChild(el("div","retract-note","↩ retracted by you"))}
+    toast("retracted");
+  }catch(e){toast("retract failed: "+e.message,"err")}
+}
+
+/* ---------- claims ---------- */
+$("btn-claims").onclick=()=>openModal("m-claim");
+$("clgo").onclick=async()=>{
+  try{
+    const p={resource_uri:$("cluri").value.trim(),kind:$("clkind").value};
+    if(p.kind==="share")p.units=parseInt($("clunits").value||"1",10);
+    if($("clttl").value)p.ttl_min=parseInt($("clttl").value,10);
+    const r=await POST("/v1/rooms/"+enc(S.room)+"/scopes",p);
+    closeModal("m-claim");$("cluri").value="";
+    toast("claimed "+p.resource_uri+(r.expires_at?" · expires "+new Date(r.expires_at).toLocaleTimeString():""));
+    refreshSide();
+  }catch(e){
+    $("clerr").textContent=(e.code==="scope_conflict"&&e.detail&&e.detail.conflicting)
+      ?("conflict — "+e.detail.conflicting.holder+" holds it ("+e.detail.conflicting.kind+", expires "+ago(e.detail.conflicting.expires_at)+")")
+      :e.message;
+  }
+};
+async function doRenew(id){try{const r=await POST("/v1/rooms/"+enc(S.room)+"/scopes/"+enc(id)+"/renew",{});toast("renewed · expires "+new Date(r.expires_at).toLocaleTimeString());refreshSide()}catch(e){toast("renew failed: "+e.message,"err")}}
+async function doRelease(id){try{await DEL("/v1/rooms/"+enc(S.room)+"/scopes/"+enc(id));toast("released");refreshSide()}catch(e){toast("release failed: "+e.message,"err")}}
+
+/* ---------- members modal + admin ---------- */
+$("btn-members").onclick=async()=>{
+  openModal("m-members");$("mm-err").textContent="";
+  const b=$("mm-body");b.innerHTML="<p class='empty'>loading…</p>";
+  try{
+    const room=await GET("/v1/rooms/"+enc(S.room));
+    const mems=await GET("/v1/rooms/"+enc(S.room)+"/members");
+    const admins=(room.charter&&room.charter.admins)||[];
+    const isAdmin=admins.includes(S.seat);
+    $("mm-title").textContent="Members · "+S.room+(isAdmin?" (you are admin)":"");
+    b.textContent="";
+    for(const m of mems){
+      const c=el("div","card");
+      const r1=el("div","r1");
+      r1.appendChild(el("span","nm",m.seat+(m.seat===S.seat?" (you)":"")+(admins.includes(m.seat)?" · admin":"")));
+      const st=el("span",null,m.status);
+      st.style.color=m.status==="member"?"var(--ok)":m.status==="pending"?"var(--warn)":"var(--err)";
+      r1.appendChild(st);c.appendChild(r1);
+      c.appendChild(el("div","sub","read #"+(m.last_read_seq!=null?m.last_read_seq:"—")+" · poll "+ago(m.last_poll)));
+      if(isAdmin&&m.status==="pending"){
+        const rb=el("div","rowbtns");
+        const ap=el("button","mini primary","approve");ap.onclick=()=>adminMember("approve",m.seat);
+        const rv=el("button","mini danger","reject");rv.onclick=()=>adminMember("reject",m.seat);
+        rb.appendChild(ap);rb.appendChild(rv);c.appendChild(rb);
+      }else if(isAdmin&&m.status==="member"&&m.seat!=="operator"){
+        const rb=el("div","rowbtns");
+        const rv=el("button","mini danger","revoke");rv.onclick=()=>askConfirm("Revoke "+m.seat+"?","All their tokens die immediately (D19). They can re-join (new pending).",()=>adminMember("revoke",m.seat));
+        rb.appendChild(rv);c.appendChild(rb);
+      }
+      b.appendChild(c);
+    }
+  }catch(e){$("mm-err").textContent=String(e.message)}
+};
+async function adminMember(op,seat){
+  try{
+    if(op==="approve")await POST("/v1/rooms/"+enc(S.room)+"/members/"+enc(seat)+"/approve",{});
+    else if(op==="revoke")await POST("/v1/rooms/"+enc(S.room)+"/members/"+enc(seat)+"/revoke",{});
+    toast(seat+" "+(op==="approve"?"approved ✓":"revoked — tokens killed"));
+    $("btn-members").onclick();
+  }catch(e){toast(op+" failed: "+e.message,"err")}
+}
+
+/* ---------- room create / join ---------- */
+$("btn-newroom").onclick=()=>{openModal("m-newroom");$("nrerr").textContent=""};
+$("nrgo").onclick=async()=>{
+  try{
+    const name=$("nrname").value.trim();
+    const charter={purpose:$("nrpurp").value.trim()||("room "+name),admins:[S.seat],
+      claim_policy:{default_ttl_min:parseInt($("nrttl").value||"30",10),write_mandatory_for_repo_paths:true,
+        share_capacities:JSON.parse($("nrcap").value||"{}")},
+      attachment_policy:{max_file_bytes:parseInt($("nrfile").value||"26214400",10)}};
+    const r=await POST("/v1/rooms",{name,charter});
+    closeModal("m-newroom");$("nrname").value="";$("nrpurp").value="";
+    toast("room "+r.name+" created — you are admin");
+    await refreshRooms();selectRoom(r.name);
+  }catch(e){
+    $("nrerr").textContent=e.message+(e.code==="invalid_room_name"?" (a-z0-9._- only)":"");
+    if(e.message&&e.message.toLowerCase().includes("json"))$("nrerr").textContent="share capacities must be valid JSON like {\"gpu\":2}";
+  }
+};
+$("btn-joinroom").onclick=()=>{openModal("m-join");$("jrerr").textContent=""};
+$("jrgo").onclick=async()=>{
+  try{
+    const name=$("jrname").value.trim();
+    const r=await POST("/v1/rooms/"+enc(name)+"/join",{});
+    closeModal("m-join");$("jrname").value="";
+    if(r.status==="member"){toast("already a member of "+name);await refreshRooms();selectRoom(name)}
+    else{toast("join request pending — an admin of "+name+" must approve","ok");await refreshRooms()}
+  }catch(e){$("jrerr").textContent=e.status===404?("room "+$("jrname").value+" not found (404)"):e.message}
+};
+
+/* ---------- tokens ---------- */
+$("btn-tokens").onclick=()=>{openModal("m-tokens");$("tkout").textContent="";$("tkerr").textContent=""};
+$("tkissue").onclick=async()=>{
+  try{
+    const seat=$("tkseat").value.trim();if(!seat){$("tkerr").textContent="enter a seat name";return}
+    const r=await POST("/v1/tokens",{seat});
+    const d=el("div","tokline");
+    d.appendChild(el("span",null,"token for "+seat+" (shown ONCE):"));
+    const c=el("code",null,r.token);d.appendChild(c);
+    const cp=el("button","mini","copy");cp.onclick=()=>{navigator.clipboard.writeText(r.token).then(()=>toast("copied"))};
+    d.appendChild(cp);
+    $("tkout").textContent="";$("tkout").appendChild(d);$("tkerr").textContent="";$("tkseat").value="";
+  }catch(e){$("tkerr").textContent=e.status===403?"only admins may issue tokens":e.message}
+};
+
+/* ---------- confirm ---------- */
+function askConfirm(title,body,fn){
+  $("cf-title").textContent=title;$("cf-body").textContent=body;
+  openModal("m-confirm");
+  $("cfgo").onclick=()=>{closeModal("m-confirm");fn()};
+}
+
+/* ---------- keyboard ---------- */
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"){for(const id of["m-newroom","m-join","m-members","m-claim","m-tokens","m-confirm"])closeModal(id)}
+});
+
+/* presence strip refresh rides the side timer */
+const _refreshSide=refreshSide;
+refreshSide=async function(){await _refreshSide();await refreshStrip()};
+
 boot();
 </script>
 </body>
