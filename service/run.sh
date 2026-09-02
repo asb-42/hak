@@ -1,9 +1,10 @@
-#!/usr/bin/env bash
+#!/bin/sh
 # HAK — inter-agent messaging bus. Copyright (C) 2026 asb (operator seat).
 # SPDX-License-Identifier: AGPL-3.0-only
 # This file is part of HAK. See LICENSE for the full notice.
 #
 # run.sh — one-shot launcher/operator for the HAK service (spec v0.5.1).
+# POSIX sh (dash-safe): invocable as 'sh run.sh' on any Debian/Ubuntu.
 #
 #   ./run.sh                 serve on 127.0.0.1:8890 (data in ./data/)
 #   ./run.sh --ensure-operator   create the operator token if none exists;
@@ -30,7 +31,7 @@
 # PEP 668 systems a bare "pip install" into the system interpreter is
 # refused by design, and we do not bypass that with --break-system-packages.
 
-set -euo pipefail
+set -eu
 cd "$(dirname "$0")"
 
 HAK_DATA="${HAK_DATA:-./data}"
@@ -124,7 +125,7 @@ ensure_operator() {
     return 0
   fi
   say "no live operator token — bootstrapping (D24 host-local recovery)"
-  local out
+  out=""
   out="$($PY hak.py --ensure-operator)" || die "bootstrap failed"
   printf '%s\n' "$out" > "$TOKEN_FILE"     # stdout is exactly the raw secret
   chmod 600 "$TOKEN_FILE"
@@ -148,14 +149,29 @@ case "${1:-serve}" in
     URL="http://$HAK_HOST:$HAK_PORT/v1/health"
     if [ -f "$TOKEN_FILE" ]; then
       TOK="$(cat "$TOKEN_FILE")"
-      R="$(curl -sf -m 5 -H "Authorization: Bearer $TOK" "$URL" 2>/dev/null || true)"
+      CODE="$(curl -s -m 5 -o /tmp/hak_status_body.$$ -w '%{http_code}' \
+              -H "Authorization: Bearer $TOK" "$URL" 2>/dev/null)" || CODE="000"
     else
-      R=""
+      CODE="no-token"
     fi
-    if [ -n "$R" ]; then
-      say "service UP: $R"
-    else
-      say "service not answering (or no operator token) at $URL"
+    case "$CODE" in
+      200)
+        say "service UP: $(cat /tmp/hak_status_body.$$ 2>/dev/null)"
+        ;;
+      401|403)
+        say "something is answering at $URL but REJECTED our operator token"
+        say "  → likely a foreign HAK instance holds the port, or $TOKEN_FILE is stale"
+        ;;
+      000)
+        say "nothing is listening at $URL (or connection refused)"
+        ;;
+      *)
+        say "unexpected HTTP $CODE from $URL: $(cat /tmp/hak_status_body.$$ 2>/dev/null)"
+        ;;
+    esac
+    rm -f /tmp/hak_status_body.$$ 2>/dev/null || true
+    if [ "$CODE" = "no-token" ]; then
+      say "no operator token at $TOKEN_FILE — run './run.sh --ensure-operator'"
     fi
     say "data dir: $HAK_DATA (db: $HAK_DB, uploads: $HAK_UPLOADS)"
     ;;
