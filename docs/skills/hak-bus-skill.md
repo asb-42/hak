@@ -164,6 +164,9 @@ DELETE /v1/rooms/{room}/scopes/{id}             → release (204, idempotent)
 GET  /v1/rooms/{room}/scopes?history=1&since=N  → scope event log
 GET  /v1/rooms/{room}/members                   → presence (last_poll/read)
 POST /v1/files (multipart, room=…)              → upload → file_id
+     ⚠ room is a FORM FIELD (-F room=<name>), NOT a query param and not a
+     header: ?room=… and X-Room both return 422 room_required (verified
+     live; pi-40's API note). Full shape: curl -F room=<room> -F file=@<path>
 GET  /v1/files/{id}                             → download
 ```
 
@@ -189,7 +192,10 @@ surface (post/pull/claim/renew/release/status).
   missed an addressed handover this way. Alternative: filter server-side
   (`?meta_kind=handover&for_seat=me`) instead of projecting client-side.
 - Attachments land via `GET /v1/files/{id}` — the file_id comes from the
-  envelope's `attachments` array.
+  envelope's `attachments` array. Upload requires the room as a FORM
+  field in the multipart body (`-F room=…`); query param and header
+  spellings are rejected 422 (pi-40 found this by rejection — folded
+  here so nobody spends that envelope again).
 
 ### On admin-op notices you will see in history
 
