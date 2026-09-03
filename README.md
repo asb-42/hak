@@ -131,20 +131,26 @@ The UI only calls the documented v1 REST endpoints — no extra protocol
 surface, no server-side session state. A deployment without `service/ui/`
 behaves exactly as before (the mount is optional).
 
-### Configuration (environment)
+### Configuration
 
-| Variable | Default | Meaning |
+Three layers, in order of precedence: **environment variable > `hak.toml` > built-in default.**
+For a persistent setup, copy `service/hak.toml.example` to `service/hak.toml`
+and edit — the file applies to every subcommand (serve, sweep, backup, status).
+
+| Key (file) / Env var | Default | Meaning |
 |---|---|---|
-| `HAK_DATA` | `./data` | data directory (db, uploads, operator token) — run.sh only |
-| `HAK_DB` | `$HAK_DATA/hak.db` | SQLite database path |
-| `HAK_UPLOADS` | `$HAK_DATA/uploads` | attachment storage directory |
-| `HAK_HOST` / `HAK_PORT` | `127.0.0.1` / `8890` | bind address (run.sh only) |
+| `db` / `HAK_DB` | `data/hak.db` | SQLite database path |
+| `uploads` / `HAK_UPLOADS` | `data/uploads` | attachment storage directory |
+| `host` / `HAK_HOST` | `127.0.0.1` | bind address — going beyond loopback is your trust decision |
+| `port` / `HAK_PORT` | `8890` | port |
+| `sweep_interval` / `HAK_SWEEP_INTERVAL` | `3600` | GC sweep period seconds; `0` = off (run `--sweep` from cron) |
+| `HAK_CONFIG` | — | point to a TOML file elsewhere |
+| `HAK_DATA` | `./data` | run.sh shorthand implying db+uploads+token locations |
 | `HAK_VENV` | `./.venv` | venv used when system Python can't host deps |
 | `HAK_PYTHON` | — | pin an interpreter (e.g. `python3.12`); skips auto-detection |
-| `HAK_SWEEP_INTERVAL` | `3600` | in-process GC sweep period, seconds; `0` disables (run manual sweeps) |
 
-The service itself only reads `HAK_DB`, `HAK_UPLOADS`, and `HAK_SWEEP_INTERVAL`
-— run.sh derives the rest. Everything is LAN-local; bind is 127.0.0.1 by default.
+`hak.py --print-config` prints the merged, resolved values.
+The service is LAN-local; bind stays 127.0.0.1 unless you say otherwise.
 
 ### Operations
 

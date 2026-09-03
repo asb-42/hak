@@ -1,0 +1,21 @@
+# HAK service configuration — copy to hak.toml and edit.
+# Every key is optional; values here override built-in defaults.
+# Precedence: environment variable > this file > built-in default.
+# (HAK_CONFIG=/path/to/other.toml points elsewhere.)
+
+# SQLite database path. Default: <service dir>/data/hak.db
+# db = "/var/lib/hak/hak.db"
+
+# Attachment storage. Default: <service dir>/data/uploads
+# uploads = "/var/lib/hak/uploads"
+
+# Bind address for `hak.py serve` / run.sh. Default: 127.0.0.1
+# host = "0.0.0.0"          # LAN-only service — binding beyond loopback is
+#                           # your trust decision, not the default.
+
+# Port. Default: 8890
+# port = 8890
+
+# GC sweep period in seconds (in-process sweeper). 0 disables (use
+# `./run.sh --sweep` from cron instead). Default: 3600 (hourly).
+# sweep_interval = 3600

@@ -15,6 +15,7 @@
 #
 # Environment overrides (all optional):
 #   HAK_DATA       data directory (db + uploads + operator token)   [./data]
+#                  (a hak.toml or explicit HAK_DB/HAK_UPLOADS overrides these)
 #   HAK_HOST       bind address                                      [127.0.0.1]
 #   HAK_PORT       port                                              [8890]
 #   HAK_SWEEP_INTERVAL  in-process sweeper seconds; 0 disables       [3600]
@@ -34,16 +35,12 @@
 set -eu
 cd "$(dirname "$0")"
 
-HAK_DATA="${HAK_DATA:-./data}"
-HAK_HOST="${HAK_HOST:-127.0.0.1}"
-HAK_PORT="${HAK_PORT:-8890}"
-export HAK_DB="${HAK_DB:-$HAK_DATA/hak.db}"
-export HAK_UPLOADS="${HAK_UPLOADS:-$HAK_DATA/uploads}"
-export HAK_SWEEP_INTERVAL="${HAK_SWEEP_INTERVAL:-3600}"
+# --- configuration resolution -------------------------------------------
+# Precedence everywhere: environment variable > hak.toml (or $HAK_CONFIG) >
+# built-in default. hak.py owns the merge; run.sh asks it for the resolved
+# values (--print-config) and assigns ONLY the ones the operator did not set
+# in the environment. HAK_DATA stays as run.sh's shorthand for db+uploads+token.
 HAK_VENV="${HAK_VENV:-./.venv}"
-
-mkdir -p "$HAK_DATA" "$HAK_UPLOADS"
-chmod 700 "$HAK_DATA" 2>/dev/null || true
 
 say() { printf '[run.sh] %s\n' "$*"; }
 die() { printf '[run.sh] ERROR: %s\n' "$*" >&2; exit 1; }
@@ -98,6 +95,27 @@ resolve_python() {
   PY="$HAK_VENV/bin/python"
 }
 resolve_python
+
+# Import the merged config (env > file > default) from the one authority:
+# hak.py --print-config. Assign ONLY values the environment did not set, so
+# explicit env vars keep winning; a hak.toml applies to every subcommand.
+import_cfg() {
+  while IFS='=' read -r k v; do
+    case $k in HAK_DB|HAK_UPLOADS|HAK_SWEEP_INTERVAL|HAK_HOST|HAK_PORT) ;; *) continue ;; esac
+    # strip surrounding quotes from hak.py's output
+    v=${v#\'}; v=${v%\'}
+    eval "export $k=\"\${$k:-$v}\"" 2>/dev/null || true
+  done <<EOF
+$($PY hak.py --print-config 2>/dev/null)
+EOF
+}
+import_cfg
+
+# run.sh-level default: data dir for token file + dirs (db/uploads already
+# resolved above; only used here for TOKEN_FILE and mkdir)
+HAK_DATA="${HAK_DATA:-$(dirname "$HAK_DB")}"
+mkdir -p "$(dirname "$HAK_DB")" "$HAK_UPLOADS" 2>/dev/null || true
+chmod 700 "$(dirname "$HAK_DB")" 2>/dev/null || true
 
 TOKEN_FILE="$HAK_DATA/operator.token"
 

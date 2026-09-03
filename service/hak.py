@@ -32,10 +32,45 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from canonical import canonicalize
 
-DB_PATH = os.environ.get("HAK_DB", "hak.db")
-UPLOADS_DIR = Path(os.environ.get("HAK_UPLOADS", "uploads"))
-SCHEMA_PATH = Path(__file__).parent / "schema.sql"
-SWEEP_INTERVAL = int(os.environ.get("HAK_SWEEP_INTERVAL", "3600"))  # 0 = off
+def _load_toml_config() -> dict:
+    """Config file: HAK_CONFIG if set, else hak.toml next to this file.
+    Bad TOML → warning + ignore (service still boots on defaults)."""
+    path = os.environ.get("HAK_CONFIG")
+    candidates = [Path(path)] if path else [Path(__file__).resolve().parent / "hak.toml"]
+    for c in candidates:
+        if c.is_file():
+            try:
+                import tomllib
+                with open(c, "rb") as f:
+                    return tomllib.load(f)
+            except Exception as e:
+                print(f"[hak] warning: config {c} unreadable, ignoring: {e}", file=sys.stderr)
+                return {}
+    return {}
+
+
+_CFG = _load_toml_config()
+
+
+def _cfg(key: str, env: str, default):
+    """Precedence: environment variable > config file > built-in default.
+    String-typed: callers convert (int/Path) as needed."""
+    if os.environ.get(env):
+        return os.environ[env]
+    if _CFG.get(key) is not None:
+        return _CFG[key]
+    return default
+
+
+_SERVE_DIR = Path(__file__).resolve().parent
+_DATA_DEFAULT = os.environ.get("HAK_DATA", str(_SERVE_DIR / "data"))
+
+DB_PATH = str(_cfg("db", "HAK_DB", os.path.join(_DATA_DEFAULT, "hak.db")))
+UPLOADS_DIR = Path(str(_cfg("uploads", "HAK_UPLOADS", os.path.join(_DATA_DEFAULT, "uploads"))))
+SCHEMA_PATH = _SERVE_DIR / "schema.sql"
+SWEEP_INTERVAL = int(_cfg("sweep_interval", "HAK_SWEEP_INTERVAL", 3600))  # 0 = off
+BIND_HOST = str(_cfg("host", "HAK_HOST", "127.0.0.1"))
+BIND_PORT = int(_cfg("port", "HAK_PORT", 8890))
 
 ROOM_RE = re.compile(r"^[a-z0-9][a-z0-9._-]{0,62}$")
 TYPES = {"chat", "status", "task_request", "task_result", "artifact_ref",
@@ -1069,7 +1104,14 @@ def backup_to(dest: str) -> Path:
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
+    if len(sys.argv) > 1 and sys.argv[1] == "--print-config":
+        # Shell-sourceable resolved values (env > hak.toml > defaults) for run.sh.
+        print(f"HAK_DB='{DB_PATH}'")
+        print(f"HAK_UPLOADS='{UPLOADS_DIR}'")
+        print(f"HAK_SWEEP_INTERVAL='{SWEEP_INTERVAL}'")
+        print(f"HAK_HOST='{BIND_HOST}'")
+        print(f"HAK_PORT='{BIND_PORT}'")
+    elif len(sys.argv) > 1 and sys.argv[1] == "bootstrap":
         if "--seat" in sys.argv and "operator" in sys.argv[sys.argv.index("--seat") + 1:]:
             bootstrap_operator()
         else:
