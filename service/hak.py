@@ -27,7 +27,7 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, model_validator
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from canonical import canonicalize
@@ -238,6 +238,40 @@ def next_seq(con: sqlite3.Connection, room: str) -> int:
 
 # ---------------------------------------------------------------- models
 
+class Attachment(BaseModel):
+    """Schema-validated attachment element: file_id required, name optional.
+    A bare string ('f_...') is accepted and normalized to {file_id: <string>} —
+    both spellings are legal on the wire (D29 never pinned element shape),
+    and pydantic must reject anything else with a NAMED field error, never a
+    500 deep in _validate_envelope."""
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str
+    name: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _string_shorthand(cls, v):
+        if isinstance(v, str):
+            return {"file_id": v}
+        return v
+
+
+class Ref(BaseModel):
+    """Reference element: uri + optional note; string shorthand accepted."""
+    model_config = ConfigDict(extra="forbid")
+
+    uri: str
+    note: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _string_shorthand(cls, v):
+        if isinstance(v, str):
+            return {"uri": v}
+        return v
+
+
 class EnvelopeIn(BaseModel):
     """Client-creatable fields only. Server-owned fields (seq, id, ts, room,
     from, and meta.kind='admin-op') are rejected at the schema edge (D10):
@@ -250,8 +284,8 @@ class EnvelopeIn(BaseModel):
     type: str
     reply_to: str | None = None
     body: str
-    attachments: list | None = None
-    refs: list | None = None
+    attachments: list[Attachment] | None = None
+    refs: list[Ref] | None = None
     meta: dict | None = None
 
 
@@ -525,8 +559,8 @@ def post_message(room: str, payload: EnvelopeIn, request: Request):
             (mid, room, seq, payload.client_msg_id, body_hash, seat, payload.backend,
              (payload.to or {}).get("seat") if payload.to else None, payload.type,
              payload.reply_to, payload.body,
-             canonicalize(payload.attachments) if payload.attachments else None,
-             canonicalize(payload.refs) if payload.refs else None,
+             canonicalize([a.model_dump(exclude_none=True) for a in payload.attachments]) if payload.attachments else None,
+             canonicalize([r.model_dump(exclude_none=True) for r in payload.refs]) if payload.refs else None,
              canonicalize(payload.meta) if payload.meta else None, now_iso()))
         row = con.execute("SELECT * FROM messages WHERE id=?", (mid,)).fetchone()
     return envelope_out(row)
@@ -574,13 +608,16 @@ def _validate_envelope(room: str, p: EnvelopeIn, seat: str, con) -> None:
                             {"effective_retraction": prior["id"]})
     if con is not None and p.attachments:
         for a in p.attachments:
-            f = con.execute("SELECT * FROM files WHERE file_id=?", (a.get("file_id", ""),)).fetchone()
+            # normalize at the boundary: elements arrive as validated
+            # Attachment models here — but never trust shape past the edge
+            fid = a.file_id if hasattr(a, "file_id") else (a.get("file_id", "") if isinstance(a, dict) else str(a))
+            f = con.execute("SELECT * FROM files WHERE file_id=?", (fid,)).fetchone()
             if f is None or f["deletion_pending"]:
                 raise error(422, "attachment_not_available",
-                            f"file {a.get('file_id')} unknown or deletion_pending (D44)")
+                            f"file {fid} unknown or deletion_pending (D44)")
             if f["room"] != room:
                 raise error(422, "cross_room_file",
-                            f"file {a['file_id']} belongs to room {f['room']} (D29)")
+                            f"file {fid} belongs to room {f['room']} (D29)")
 
 
 def envelope_out(row: sqlite3.Row) -> dict:

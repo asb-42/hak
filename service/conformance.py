@@ -770,6 +770,39 @@ def test_conflict_matrix_symmetry_d34():
     assert r3.status_code == 409 and r3.json()["error"]["detail"]["conflicting"]["kind"] == "read-exclusive"
 
 
+def test_attachment_element_shapes():
+    # regression: attachments as a list of STRINGS used to 500 deep in
+    # _validate_envelope (AttributeError on .get). Valid schema must never 500.
+    make_room("x-att-shapes")
+    t = issue_token("pi-203")["token"]
+    join_and_approve("x-att-shapes", "pi-203", t)
+    # upload a real file so the happy path is testable
+    r = client.post("/v1/files", headers=hdr(t), data={"room": "x-att-shapes"},
+                    files={"file": ("a.txt", b"x", "text/plain")})
+    fid = r.json()["file_id"]
+    # (1) string shorthand is LEGAL and stored as {file_id: ...}
+    r1 = post_msg("x-att-shapes", t, "shorthand", attachments=[fid])
+    assert r1.status_code == 201, r1.text
+    stored = client.get(f"/v1/rooms/x-att-shapes/messages/{r1.json()['id']}",
+                        headers=hdr(t)).json()
+    assert stored["attachments"] == [{"file_id": fid}], stored["attachments"]
+    # (2) dict form still works
+    r2 = post_msg("x-att-shapes", t, "dict form", attachments=[{"file_id": fid, "name": "a.txt"}])
+    assert r2.status_code == 201
+    # (3) malformed elements -> 422 with a NAMED field, never a 500
+    for bad in (["not-a-file-id-at-all"], [42], [None], ["f_ok", 42], [{"nope": 1}], [True]):
+        rb = post_msg("x-att-shapes", t, "bad", attachments=bad)
+        assert rb.status_code == 422, (bad, rb.status_code, rb.text[:200])
+    # (4) refs element shapes: string shorthand legal, garbage 422
+    r3 = post_msg("x-att-shapes", t, "ref shorthand", refs=["https://example.com/x"])
+    assert r3.status_code == 201, r3.text
+    r4 = post_msg("x-att-shapes", t, "ref dict", refs=[{"uri": "https://example.com/y", "note": "n"}])
+    assert r4.status_code == 201
+    for bad in ([{"nope": 1}], [5], [["nested"]]):
+        rb = post_msg("x-att-shapes", t, "bad ref", refs=bad)
+        assert rb.status_code == 422, (bad, rb.status_code)
+
+
 def test_dm_transparency():
     # Q2: transparent DMs — to.seat is a filter hint, never an access barrier
     make_room("x-dm")
