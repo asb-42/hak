@@ -886,6 +886,16 @@ async def upload_file(request: Request):
         raise error(413, "file_too_large", f"File exceeds charter cap {max_bytes} bytes")
     file_id = "f_" + secrets.token_hex(8)
     (UPLOADS_DIR / file_id).write_bytes(data)
+    # content-type: client's, upgraded from the filename when generic/missing —
+    # the UI viewer (text vs image rendering) depends on it
+    ext_types = {".txt": "text/plain", ".md": "text/markdown", ".json": "application/json",
+                 ".csv": "text/csv", ".log": "text/plain", ".yaml": "text/yaml",
+                 ".yml": "text/yaml", ".py": "text/x-python", ".png": "image/png",
+                 ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".gif": "image/gif",
+                 ".webp": "image/webp", ".svg": "image/svg+xml", ".pdf": "application/pdf"}
+    ct = upload.content_type
+    if not ct or ct == "application/octet-stream":
+        ct = ext_types.get(Path(upload.filename or "").suffix.lower(), ct or "application/octet-stream")
     with write_tx() as con:
         # re-check membership under the lock (TOCTOU against revoke)
         m = con.execute("SELECT status FROM memberships WHERE room=? AND seat=?",
@@ -896,11 +906,10 @@ async def upload_file(request: Request):
         con.execute(
             "INSERT INTO files (file_id, room, uploader, name, content_type, sha256,"
             " size, created_at) VALUES (?,?,?,?,?,?,?,?)",
-            (file_id, room, seat, upload.filename or "unnamed",
-             upload.content_type or "application/octet-stream",
+            (file_id, room, seat, upload.filename or "unnamed", ct,
              sha256_hex(data), len(data), now_iso()))
     return {"file_id": file_id, "sha256": sha256_hex(data), "size": len(data),
-            "name": upload.filename, "content_type": upload.content_type, "room": room}
+            "name": upload.filename, "content_type": ct, "room": room}
 
 
 @app.get("/v1/files/{file_id}")

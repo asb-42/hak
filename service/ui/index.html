@@ -343,6 +343,37 @@ aside .box{padding:0 12px 12px}
   </div>
 </div>
 
+<!-- file viewer -->
+<div class="modal" id="m-file">
+  <div class="card" style="width:720px">
+    <h3 id="fv-title">file</h3>
+    <p class="sub" id="fv-meta" style="color:var(--dim);font-size:12px;margin:2px 0 10px"></p>
+    <div id="fv-body" style="background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;max-height:55vh;overflow:auto;white-space:pre-wrap;word-break:break-word;font-size:12.5px;font-family:var(--mono)"></div>
+    <div class="rowbtns" style="margin-top:14px">
+      <button class="ghost" id="fv-copy">Copy text</button>
+      <button class="ghost" id="fv-dl">Download</button>
+      <button class="ghost" onclick="closeModal('m-file')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- resource drawer -->
+<div class="modal" id="m-resource">
+  <div class="card" style="width:640px">
+    <h3 id="rs-title">resource</h3>
+    <p class="sub" id="rs-uri" style="color:var(--warn);font-size:11.5px;font-family:var(--mono);word-break:break-all;margin:2px 0 6px"></p>
+    <p style="color:var(--dim);font-size:12px">A scope resource is a URI on the holder's host — the bus does not serve host filesystem content. Below is everything the bus itself knows about this resource.</p>
+    <h3 style="margin:14px 0 4px">Scope history</h3>
+    <div id="rs-history"></div>
+    <h3 style="margin:14px 0 4px">Envelopes referencing it</h3>
+    <div id="rs-mentions"></div>
+    <div class="rowbtns" style="margin-top:14px">
+      <button class="ghost" id="rs-copy">Copy URI</button>
+      <button class="ghost" onclick="closeModal('m-resource')">Close</button>
+    </div>
+  </div>
+</div>
+
 <!-- confirm -->
 <div class="modal" id="m-confirm">
   <div class="card">
@@ -583,8 +614,8 @@ function envEl(m){
       const id=typeof a==="string"?a:a&&a.file_id;if(!id)continue;
       const name=(a&&a.name)||id;
       const l=el("span","att","📄 "+name);
-      l.title="download "+name;
-      l.onclick=()=>download(id,name);
+      l.title="view "+name;
+      l.onclick=()=>viewFile(id,name);
       at.appendChild(l);
     }
     if(at.childNodes.length)e.appendChild(at);
@@ -604,15 +635,91 @@ function envEl(m){
   }
   return e;
 }
+let _fvBlob=null,_fvText=null;
+async function viewFile(id,name){
+  try{
+    openModal("m-file");_fvBlob=null;_fvText=null;
+    $("fv-title").textContent=name||id;
+    $("fv-meta").textContent="loading "+(id||"")+" …";
+    $("fv-body").textContent="";
+    const r=await fetch("/v1/files/"+enc(id),{headers:{Authorization:"Bearer "+S.token}});
+    if(!r.ok){const j=await r.json().catch(()=>null);throw new Error((j&&j.error&&j.error.message)||("HTTP "+r.status))}
+    const ct=r.headers.get("content-type")||"";
+    const b=await r.blob();_fvBlob=b;
+    $("fv-meta").textContent=id+" · "+ct.split(";")[0]+" · "+(b.size>1024?(b.size/1024).toFixed(1)+" KB":b.size+" B");
+    if(ct.startsWith("image/")){
+      const u=URL.createObjectURL(b),img=document.createElement("img");
+      img.src=u;img.style.maxWidth="100%";$("fv-body").textContent="";$("fv-body").appendChild(img);
+    }else{
+      const t=await b.text();_fvText=t;
+      const MAX=100000;   // cap inline text at 100 KB — larger: offer download
+      if(t.length>MAX){
+        $("fv-body").textContent=t.slice(0,MAX)+"\n\n… ("+(t.length/1000).toFixed(0)+" KB total — use Download for the full file)";
+      }else $("fv-body").textContent=t||"(empty file)";
+    }
+  }catch(e){$("fv-meta").textContent="";$("fv-body").textContent="";$("fv-meta").textContent="failed: "+e.message}
+}
+$("fv-dl").onclick=()=>{if(_fvBlob)downloadBlob(_fvBlob,$("fv-title").textContent)};
+$("fv-copy").onclick=()=>{if(_fvText!=null)navigator.clipboard.writeText(_fvText).then(()=>toast("copied"))};
+
 async function download(id,name){
   try{
     const r=await fetch("/v1/files/"+enc(id),{headers:{Authorization:"Bearer "+S.token}});
     if(!r.ok)throw new Error("HTTP "+r.status);
-    const b=await r.blob(),u=URL.createObjectURL(b),a=document.createElement("a");
-    a.href=u;a.download=name||id;document.body.appendChild(a);a.click();a.remove();
-    setTimeout(()=>URL.revokeObjectURL(u),5000);
+    const b=await r.blob();downloadBlob(b,name||id);
   }catch(e){toast("download failed: "+e.message,"err")}
 }
+function downloadBlob(b,name){
+  const u=URL.createObjectURL(b),a=document.createElement("a");
+  a.href=u;a.download=name||"hak-file";document.body.appendChild(a);a.click();a.remove();
+  setTimeout(()=>URL.revokeObjectURL(u),5000);
+}
+
+/* ---------- resource drawer: everything the bus knows about a scope URI ---------- */
+let _rsURI="";
+async function viewResource(uri){
+  openModal("m-resource");_rsURI=uri;
+  $("rs-title").textContent=uri.replace(/^file:\/\/+/,"")||uri;
+  $("rs-uri").textContent=uri;
+  $("rs-history").textContent="loading…";
+  $("rs-mentions").textContent="";
+  try{
+    const [hist,msgs]=await Promise.all([
+      GET("/v1/rooms/"+enc(S.room)+"/scopes?history=1&since=0"),
+      GET("/v1/rooms/"+enc(S.room)+"/messages?since=0&limit=500"),
+    ]);
+    const events=(hist.events||[]).filter(e=>e.resource_uri===uri);
+    const hb=$("rs-history");hb.textContent="";
+    if(!events.length)hb.appendChild(el("div","empty","no scope events for this exact URI"));
+    for(const e of events){
+      const c=el("div","card");
+      const r1=el("div","r1");
+      r1.appendChild(el("span","nm",e.seat));
+      const a=el("span",null,e.action+" · "+e.kind+(e.units>1?" ×"+e.units:""));
+      a.style.color=e.action==="release"?"var(--ok)":e.action==="claim"?"var(--acc)":"var(--warn)";
+      r1.appendChild(a);c.appendChild(r1);
+      c.appendChild(el("div","sub","scope_seq "+e.scope_seq+" · "+new Date(e.ts).toLocaleString()+" · "+(e.action==="release"?"released":e.expires_at?"expires "+new Date(e.expires_at).toLocaleTimeString():"")));
+      hb.appendChild(c);
+    }
+    const mb=$("rs-mentions");mb.textContent="";
+    const hits=(msgs.messages||[]).filter(m=>
+      (m.body&&m.body.includes(uri))||
+      (m.body&&uri.replace(/^file:\/\/+/,"")&&m.body.includes(uri.replace(/^file:\/\/+/,"")))||
+      JSON.stringify(m.attachments||[]).includes(uri));
+    if(!hits.length)mb.appendChild(el("div","empty","no envelopes reference this resource"));
+    for(const m of hits.slice(0,25)){
+      const c=el("div","card");
+      const r1=el("div","r1");
+      r1.appendChild(el("span","nm","#"+m.seq+" · "+(m.from&&m.from.seat||"?")));
+      r1.appendChild(el("span","",fmtTs(m.ts)));c.appendChild(r1);
+      const t=el("div","sub",(m.body||"").slice(0,140)+(m.body&&m.body.length>140?"…":""));
+      t.style.cursor="pointer";t.title="jump to envelope";
+      t.onclick=()=>{closeModal("m-resource");const t2=$("env-"+m.id);if(t2){t2.scrollIntoView({block:"center",behavior:"smooth"});t2.style.outline="1px solid var(--acc)";setTimeout(()=>t2.style.outline="",1500)}};
+      c.appendChild(t);mb.appendChild(c);
+    }
+  }catch(e){$("rs-history").textContent="failed: "+e.message}
+}
+$("rs-copy").onclick=()=>{if(_rsURI)navigator.clipboard.writeText(_rsURI).then(()=>toast("URI copied"))};
 
 /* ---------- polling ---------- */
 function startPolling(){
@@ -672,7 +779,10 @@ async function refreshSide(){
     for(const s of act){
       const c=el("div","card scope-card");
       const r1=el("div","r1");
-      r1.appendChild(el("span","res",s.resource_uri));
+      const res=el("span","res",s.resource_uri);
+      res.style.cursor="pointer";res.title="everything the bus knows about this resource";
+      res.onclick=()=>viewResource(s.resource_uri);
+      r1.appendChild(res);
       c.appendChild(r1);
       const sub=el("div","sub");
       sub.appendChild(el("span","knd "+s.kind,s.kind+(s.units>1?" ×"+s.units:"")));
@@ -932,7 +1042,7 @@ function askConfirm(title,body,fn){
 
 /* ---------- keyboard ---------- */
 document.addEventListener("keydown",e=>{
-  if(e.key==="Escape"){for(const id of["m-newroom","m-join","m-members","m-claim","m-tokens","m-confirm"])closeModal(id)}
+  if(e.key==="Escape"){for(const id of["m-newroom","m-join","m-members","m-claim","m-tokens","m-confirm","m-file","m-resource"])closeModal(id)}
 });
 
 /* presence strip refresh rides the side timer */
