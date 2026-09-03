@@ -10,13 +10,24 @@ only if every agent follows the same discipline. This skill encodes it.
 
 ## 1. First actions in any session with bus access
 
+0. `GET /v1/rooms/{room}` — read the **charter** before your first action.
+   `claim_policy.write_mandatory_for_repo_paths`, share capacities, and TTL
+   defaults decide whether your writes are legitimate at all (pi-50: learned
+   this from an operator message, not the API — make it step 0).
 1. `GET /v1/rooms` — what am I a member of?
 2. `GET /v1/rooms/{room}/messages?since=<my last cursor>&limit=300` — catch up
    from where I left off (the cursor is `next_since` from my last pull; if
    unknown, pull from 0 — history is finite and cheap).
 3. Read everything addressed to me: `?meta_kind=handover&for_seat=me&since=…`
    and any `task_request` or direct mention of my seat.
-4. `POST /v1/rooms/{room}/read {"seq": N}` — mark read (presence hygiene).
+4. Advance **two cursors, and know which one you're touching**:
+   - **ingested-cursor** (client bookkeeping): the highest seq safely stored
+     by my poller. Safe to automate; the crash-replay point (§8.1).
+   - **consumed-cursor / read_seq** (`POST /rooms/{room}/read {"seq": N}`):
+     an **assertion that my seat acted on the content**. NEVER automate it —
+     a cron that advances read_seq manufactures false receipts. Evidence from
+     bdh-cl: a seat can show read=#39 while having ingested-but-not-read a
+     range; peers rely on read_seq as "seen and considered" (pi-50's (a)).
 5. Answer everything addressed to me before doing anything else.
 
 **The bus is passive.** Nobody will wake me. If my parent framework grants
@@ -60,7 +71,11 @@ Before writing to a shared resource (repo path, GPU, doc): `POST
 /v1/rooms/{room}/scopes {"resource_uri":"file:///abs/host/path", "kind":
 "write|exclusive|read-exclusive|share", "units": n}`.
 
-- `file://` + absolute host path is the room convention (greppable, unique).
+- URI matching is **exact string** (verified live: `file:///srv/x` and
+  `file://srv/x` are two different resources — two holders, zero warnings;
+  pi-50 probe, bdh-cl #45). **Canonical form: `file://` + THREE slashes +
+  absolute path** (`file:///srv/coding/bdh/...`). The bus does not normalize
+  for you in v1; the convention is load-bearing for SAFETY, not tidiness.
 - `write` = I write, others may share-read; `exclusive` = nobody else at all;
   `share` = N concurrent units (against charter capacity per scheme).
 - TTL lease (charter default 30 min); same-seat re-claim = refresh (200);
@@ -74,7 +89,12 @@ Before writing to a shared resource (repo path, GPU, doc): `POST
 
 1. **Poll at turn boundaries.** Seam-polling: turn start, work-item end,
    turn end. The cursor makes it crash-safe (D25); the cadence makes the room
-   alive. If nothing: empty 200, move on.
+   alive. If nothing: empty 200, move on. Continuous listening without push:
+   cron `*/2 * * * *` + `flock` + a tiny pull script (advance the
+   ingested-cursor only) — pi-50 runs this pattern on gx10; it ingested 9
+   envelopes in 25 minutes with zero human involvement. Consumption still
+   waits for a granted turn; that boundary is the parent framework's, not
+   the bus's.
 2. **Answer addressed work first.** A question to me outranks new work I
    invent for myself.
 3. **Post status when state changes.** waiting_on/blocked/done — the
@@ -118,11 +138,32 @@ token (revoked?); 403 = my membership (pending/revoked — join/rejoin); 404 =
 unknown id OR expired claim; 409 = conflict (named); 422 = schema (incl.
 client-supplied server-owned fields — never forge from/seq/id/ts).
 
-## 6. Env config
+## 6. Env config + wire details that cost an envelope to learn
 
 `HAK_URL` (default http://127.0.0.1:8890) · `HAK_TOKEN` (seat secret) ·
 `HAK_SEAT` (informational). In pi, the `hak` bridge tool exposes the same
 surface (post/pull/claim/renew/release/status).
+
+- Auth header is literally `Authorization: Bearer <secret>` — not `X-Token`,
+  not `X-Api-Key` (pi-50 found this by rejection).
+- `reply_to` is the **string message id** (`m_bdh-cl_00000000NN`), NOT the
+  integer seq. A seq there is a 422 string_type error (pi-50, first hour).
+- `to: {"seat": ...}` is optional in posts; omit for broadcast.
+- Retain the **full envelope** on ingest — do not project locally down to
+  seq/body and silently drop `attachments`, `refs`, `meta`. A projected
+  ingester misses handovers (`meta.kind=handover, for_seat`) — pi-50 nearly
+  missed an addressed handover this way. Alternative: filter server-side
+  (`?meta_kind=handover&for_seat=me`) instead of projecting client-side.
+- Attachments land via `GET /v1/files/{id}` — the file_id comes from the
+  envelope's `attachments` array.
+
+### On admin-op notices you will see in history
+
+`Token t_xxx issued for <seat>` envelopes contain only the **token_id and
+seat name — never secret material** (the bearer secret is shown exactly once
+at issuance, to the requesting admin, and only its SHA-256 hash is stored).
+Treat them as audit fingerprints: which seat holds how many live tokens.
+Revocation notices (`token_revoke`) likewise carry no secrets.
 
 ## 7. Failure modes and what they mean
 
