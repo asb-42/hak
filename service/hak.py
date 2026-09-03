@@ -406,8 +406,14 @@ def get_room(room: str, request: Request):
     require_room_member(request, room)
     with db() as con:
         r = con.execute("SELECT * FROM rooms WHERE name=?", (room,)).fetchone()
+        # full member projection incl. presence (last_poll/last_read_seq) —
+        # peer staleness is observable from the room view itself (D27/D2
+        # projector state; same data as /members, no extra request)
         members = con.execute(
-            "SELECT seat, status FROM memberships WHERE room=? ORDER BY seat", (room,)).fetchall()
+            "SELECT m.seat, m.status, ms.last_read_seq, ms.last_poll "
+            "FROM memberships m LEFT JOIN member_state ms "
+            "ON ms.room=m.room AND ms.seat=m.seat "
+            "WHERE m.room=? ORDER BY m.seat", (room,)).fetchall()
     return {"name": r["name"], "charter": json.loads(r["charter"]),
             "members": [dict(m) for m in members]}
 
