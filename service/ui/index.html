@@ -813,23 +813,49 @@ async function refreshSide(){
 async function refreshStrip(){
   if(!S.room)return;
   try{
-    const st=await GET("/v1/rooms/"+enc(S.room)+"/messages?type=status&limit=200&order=desc");
+    const [st,mems]=await Promise.all([
+      GET("/v1/rooms/"+enc(S.room)+"/messages?type=status&limit=200&order=desc"),
+      GET("/v1/rooms/"+enc(S.room)+"/members"),
+    ]);
     const bySeat=new Map();
     for(const m of (st.messages||[])){if(!bySeat.has(m.from.seat))bySeat.set(m.from.seat,m)}
+    const pollAge={};
+    for(const mem of (mems||[]))pollAge[mem.seat]=mem.last_poll?(Date.now()-new Date(mem.last_poll).getTime())/1e3:null;
     const strip=$("strip");strip.textContent="";
-    for(const [seat,m] of bySeat){
-      const state=m.meta&&m.meta.state;
-      if(!state)continue;
-      if(state==="done")continue;                       // D43: done clears the line
-      const p=el("div","pill"+(state==="blocked"?" blocked-pill":""));
-      p.appendChild(el("span","sd"));
-      p.appendChild(el("span","",seat));
-      p.appendChild(el("span","st "+state,state));
-      if(m.meta.ref)p.appendChild(el("span","ref",m.meta.ref));
-      strip.appendChild(p);
+    /* every member gets a pill: declared status, or a muted placeholder —
+       silent seats stay visible instead of randomly absent (UX fix). */
+    for(const mem of (mems||[])){
+      const seat=mem.seat, m=bySeat.get(seat), state=m&&m.meta&&m.meta.state;
+      const age=pollAge[seat];
+      const live=age!=null&&age<900;              // D27: 15 min staleness
+      if(state&&state!=="done"){                  // declared, not done
+        const p=el("div","pill"+(state==="blocked"?" blocked-pill":live?" live":" stale"));
+        p.appendChild(el("span","sd"));
+        p.appendChild(el("span",null,seat));
+        p.appendChild(el("span","st "+state,state));
+        if(m.meta.ref)p.appendChild(el("span","ref",m.meta.ref));
+        p.title=seat+": "+state+(live?" · active":" · last poll "+(age!=null?Math.round(age/60)+"m ago":"—"));
+        strip.appendChild(p);
+      }else if(state==="done"){
+        const p=el("div","pill stale");           // done: muted completion marker
+        p.appendChild(el("span","sd"));
+        p.appendChild(el("span",null,seat));
+        p.appendChild(el("span","st done","done"));
+        if(m.meta.ref)p.appendChild(el("span","ref",m.meta.ref));
+        p.title=seat+" finished (done clears the active line)";
+        strip.appendChild(p);
+      }else{
+        const p=el("div","pill stale");           // no status declared yet
+        p.appendChild(el("span","sd"));
+        p.appendChild(el("span",null,seat));
+        p.appendChild(el("span","st","—"));
+        p.title=seat+" has not declared a status (post type=status with meta.state to appear)";
+        strip.appendChild(p);
+      }
     }
   }catch(e){}
 }
+
 
 /* ---------- composer ---------- */
 let replyTarget=null;
