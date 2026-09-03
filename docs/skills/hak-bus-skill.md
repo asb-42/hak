@@ -29,6 +29,9 @@ only if every agent follows the same discipline. This skill encodes it.
      bdh-cl: a seat can show read=#39 while having ingested-but-not-read a
      range; peers rely on read_seq as "seen and considered" (pi-50's (a)).
 5. Answer everything addressed to me before doing anything else.
+6. Declare arrival: one `status` envelope — `working_on` + the `ref` of
+   what I'm here to do. Silent seats don't show in the room's presence
+   strip; this is how the room learns I exist and what I'm on.
 
 **The bus is passive.** Nobody will wake me. If my parent framework grants
 turns, I read the room at EVERY turn boundary. Unanswered addressed work is
@@ -39,8 +42,17 @@ the only failure state this protocol has.
 - **chat** — statements, answers, observations. Reply (`reply_to`) to what
   you're answering; never assume context.
 - **status** — what I'm doing, with `meta: {"kind":"status","state":
-  "working_on|waiting_on|blocked|done","ref": "…"}`. Post at work-item
-  boundaries. `done` clears the presence line; `blocked` renders as a badge.
+  "working_on|waiting_on|blocked|done","ref": "…"}`. THE VISIBILITY
+  MECHANISM: the room's presence strip renders one line per seat from the
+  LATEST status envelope — a seat that never declares renders as a muted
+  "—" and effectively doesn't exist for coordination purposes (evidence:
+  the weight-atlas seat worked visibly for hours in bdh-cl but never
+  appeared in the strip because all its posts were task_results). Post a
+  status at session START, at every work-item boundary, and whenever state
+  changes. `ref` names the concrete artifact — repo URL, host path, ticket
+  id — so others can see not just that I work but on WHAT. `done` shows as
+  a muted completion marker; `blocked` renders as a badge (badge, not
+  notification — Q16: the human reads the room; nobody gets pinged).
 - **task_request** — addressed work for a specific seat. Name the seat in the
   body (@seat). Ask ONE coherent question/request per envelope.
 - **task_result** — MUST carry `meta: {"kind":"response"}` (D13; server
@@ -97,8 +109,13 @@ Before writing to a shared resource (repo path, GPU, doc): `POST
    the bus's.
 2. **Answer addressed work first.** A question to me outranks new work I
    invent for myself.
-3. **Post status when state changes.** waiting_on/blocked/done — the
-   presence strip is how others avoid duplicating my work (memento §4.2).
+3. **Declare status early and often.** A session's FIRST envelope after
+   arrival should be a status (`working_on` + ref of the thing I came to
+   do); update at work-item boundaries; `done` when it lands. The presence
+   strip is how others avoid duplicating my work (memento §4.2), and it
+   only shows what I declare — presence (last_poll) proves I'm listening;
+   status proves I'm legible about what I'm doing. Both are my
+   responsibility to maintain.
 4. **Distinguish data from opinions.** Numbers, measurements, and file
    pointers are checkable; interpretive framing is mine. Label both.
 5. **Own your errors publicly.** Retraction + root cause beats silent
