@@ -509,19 +509,37 @@ async function loadHistory(){
   }
   all.reverse();
   const f=$("feed");f.textContent="";
-  if(!all.length)f.appendChild(el("p","empty","Empty room. Say hello 👋"));
-  let lastDay="";
-  for(const m of all){
-    const d=dayOf(m.ts);
-    if(d!==lastDay){f.appendChild(el("div","day",d));lastDay=d}
-    f.appendChild(envEl(m));
-    if(m.type==="retraction"&&m.reply_to)S.retractTargets.add(m.reply_to);
+  if(!all.length){f.appendChild(el("p","empty","Empty room. Say hello 👋"))}
+  else{
+    for(const m of all)appendLive(m,{scroll:false});   // guarded; builds retractTargets too
   }
-  S.seq=all.length?all[all.length-1].seq:0;
   $("fcount").textContent=all.length+" envelopes";
   $("fseq").textContent="seq "+(S.seq||"—");
   f.scrollTop=f.scrollHeight;
 }
+/* ---------- unified guarded append: ONE entry point for rendering any
+   envelope into the live feed (send path, poller, history all funnel here).
+   S.map is the single dedupe authority — an id already rendered is never
+   appended again, whatever path it arrives by. */
+function appendLive(m,opts){
+  if(S.map.has(m.id))return false;
+  S.map.set(m.id,m);
+  const f=$("feed"),o=opts||{};
+  const p=f.querySelector("p.empty");if(p)p.remove();
+  if(m.type==="retraction"&&m.reply_to){
+    S.retractTargets.add(m.reply_to);
+    const tgt=$("env-"+m.reply_to);
+    if(tgt){tgt.classList.add("retracted");tgt.appendChild(el("div","retract-note","↩ retracted by "+m.from.seat))}
+  }
+  const dd=dayOf(m.ts);
+  const dayEls=[...f.querySelectorAll(".day")];
+  if(dayEls.length===0||dayEls[dayEls.length-1].textContent!==dd)f.appendChild(el("div","day",dd));
+  f.appendChild(envEl(m));
+  if(m.seq>S.seq)S.seq=m.seq;
+  if(o.scroll!==false)f.scrollTop=f.scrollHeight;
+  return true;
+}
+
 function envEl(m){
   const sys=m.meta&&m.meta.kind==="admin-op";
   const retracted=S.retractTargets.has(m.id);
@@ -605,23 +623,16 @@ function startPolling(){
       const d=await GET("/v1/rooms/"+enc(S.room)+"/messages?since="+S.seq+"&limit=300");
       if(d.messages&&d.messages.length){
         const f=$("feed"),near=f.scrollHeight-f.scrollTop-f.clientHeight<120;
-        let ownMsg=false;
+        let ownMsg=false,appended=0;
         for(const m of d.messages){
-          if(S.map.has(m.id))continue;S.map.set(m.id,m);
           if(m.from&&m.from.seat===S.seat)ownMsg=true;
-          if(m.type==="retraction"&&m.reply_to){
-            S.retractTargets.add(m.reply_to);
-            const tgt=$("env-"+m.reply_to);if(tgt){tgt.classList.add("retracted");tgt.appendChild(el("div","retract-note","↩ retracted by "+m.from.seat))}
-          }
-          const dd=dayOf(m.ts);
-          const dayEls=[...f.querySelectorAll(".day")];
-          if(dayEls.length===0||dayEls[dayEls.length-1].textContent!==dd)f.appendChild(el("div","day",dd));
-          f.appendChild(envEl(m));
-          S.seq=m.seq;
+          if(appendLive(m,{scroll:false}))appended++;   // deduped guarded append
         }
-        if(near||ownMsg)f.scrollTop=f.scrollHeight;   // own messages always land in view
-        else{S.unread+=d.messages.length;$("newn").textContent=S.unread;$("newbar").style.display="block"}
-        markRoomRead();
+        if(appended){
+          if(near||ownMsg)f.scrollTop=f.scrollHeight;   // own messages always land in view
+          else{S.unread+=appended;$("newn").textContent=S.unread;$("newbar").style.display="block"}
+          markRoomRead();
+        }
       }
       $("conn").className="ok";$("connlab").textContent="live";
     }catch(e){
@@ -777,22 +788,16 @@ $("csend").onclick=async()=>{
     }
     const res=await POST("/v1/rooms/"+enc(S.room)+"/messages",payload);
     if(res&&res.seq){
-      /* Render our own send immediately. NEVER advance the cursor past it
-         before fetching — since= is exclusive, so S.seq=res.seq would strand
-         our message in the gap and the poller would never fetch it. Fetch the
-         stored envelope fresh and append it to the feed. */
+      /* Render our own send through the guarded append — if the 3s poller
+         already fetched and rendered it (POST->fetch-own window), appendLive
+         dedupes by id and no second copy appears. */
+      let rendered=false;
       try{
         const own=await GET("/v1/rooms/"+enc(S.room)+"/messages/"+enc(res.id));
-        const f=$("feed");
-        const p=f.querySelector("p.empty");if(p)p.remove();
-        const dayEls=[...f.querySelectorAll(".day")];
-        const dd=dayOf(own.ts);
-        if(dayEls.length===0||dayEls[dayEls.length-1].textContent!==dd)f.appendChild(el("div","day",dd));
-        f.appendChild(envEl(own));
-        f.scrollTop=f.scrollHeight;
-        S.seq=Math.max(S.seq,own.seq);
+        rendered=appendLive(own);
         markRoomRead();
       }catch(_){S.seq=Math.max(S.seq,res.seq)}
+      if(!rendered&&res.seq>S.seq){S.seq=res.seq}   // poller will bring it
     }
     $("cbody").value="";replyTarget=null;$("replybar").style.display="none";
     toast(res&&res.id?"sent · #"+res.seq:"sent");
