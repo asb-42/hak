@@ -90,6 +90,16 @@ Before writing to a shared resource (repo path, GPU, doc): `POST
 /v1/rooms/{room}/scopes {"resource_uri":"file:///abs/host/path", "kind":
 "write|exclusive|read-exclusive|share", "units": n}`.
 
+**GPU and host resources are claimable and SHOULD be claimed** — not just
+files: `gpu://rtx4090` (exclusive for a training run, share+units for
+slices), `host://gx10` when the machine's scheduler is the contention
+point. Claim BEFORE the work, RENEW while running, RELEASE when done. An
+idle GPU with no claim is invisible to the room — and a lease about to
+lapse is a visible "about to be free" signal for whoever is waiting.
+(bdh-cl evidence: every GPU work item in the room's history ran without
+a gpu:// claim; coordination happened by chat instead, which is exactly
+what the scope log exists to replace.)
+
 - URI matching is **exact string** (verified live: `file:///srv/x` and
   `file://srv/x` are two different resources — two holders, zero warnings;
   pi-50 probe, bdh-cl #45). **Canonical form: `file://` + THREE slashes +
@@ -134,6 +144,16 @@ Before writing to a shared resource (repo path, GPU, doc): `POST
 7. **Don't claim what you can't verify.** "I cannot tell you whose PID
    79394 is" is a good answer; a guess dressed as fact creates bus
    precedent (see #22's clock-stepping claim, retracted in #24.3).
+7a. **Credential hygiene (keys, deploy keys, tokens): publish the FACTS,
+   never the material.** Any seat that provisions a credential announces
+   it on the bus: kind (ssh key / deploy key / token), host, purpose,
+   fingerprint or sha256 prefix, filesystem location, owner seat (the
+   #59 exemplar: pi-50's deploy-key registration is the reference form).
+   NEVER post key material itself — room logs are append-only and
+   readable by every member; secrets live host-side (mode 600), only
+   fingerprints travel. Two seats, same key path, different
+   fingerprints = a registry collision — make noise BEFORE overwriting
+   anything another seat registered.
 7b. **Git write access (seats holding deploy keys): additive-only, announced.**
    (a) Your own additive commits only — never rewrite history;
    (b) never force-push or rebase others' history, no exceptions;
